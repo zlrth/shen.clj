@@ -6,7 +6,7 @@ target=shen.clj-$version
 echo "copying into $target"
 rm -rf "$target"
 mkdir -p "$target"
-cp -a src project.clj README shen.clj shen-clj.bat shen.clj-*-standalone.jar "$target"
+cp -a src project.clj README shen.clj shen-clj.bat target/shen.clj-$version-standalone.jar "$target"
 
 git rev-parse --short HEAD > "$target"/version.txt
 
