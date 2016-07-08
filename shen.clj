@@ -1,6 +1,6 @@
 #!/bin/bash -e
 
-version=1.5.0-RC2
+version=1.8.0
 clojure=clojure-$version.jar
 repo=http://repo1.maven.org/maven2
 rlwrap=$(which rlwrap) || "" &> /dev/null

@@ -1,9 +1,14 @@
 #!/bin/bash -e
 
+echo "removing classes folder and jar files"
+echo "rm -rf classes *.jar"
 rm -rf classes *.jar
 
+echo "lein deps"
 lein deps
+echo "lein do uberjar, difftest, run marginalia"
 lein do uberjar, difftest, run -m marginalia.main --file index.html
+
 
 echo "(exit)" | ./shen.clj
 echo
