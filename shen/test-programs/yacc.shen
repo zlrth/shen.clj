@@ -21,7 +21,7 @@ cat; dog;)
 likes; chases;)
 
 (defcc <des>
-[<ds>] [<es>] := (append <ds> <es>);) 
+[<ds>] [<es>] := (append <ds> <es>);)
 
 (defcc <ds>
   d <ds>;
@@ -39,7 +39,7 @@ NP VP -> (append [is it true that your father] VP [?]))
 
 (defcc <as->bs>
   a <a->bs> := [b | <a->bs>];
-  a := [b];) 
+  a := [b];)
 
 (defcc <find-digit>
   <digit> <morestuff> := <digit>;
@@ -56,55 +56,55 @@ NP VP -> (append [is it true that your father] VP [?]))
 (defcc <find-digit'>
   <digit> <morestuff>;
   <digit> := <digit>;
-  X <find-digit'> := <find-digit'>;) 
+  X <find-digit'> := <find-digit'>;)
 
 (defcc <asbscs>
-  <as> <bs> <cs>;) 
+  <as> <bs> <cs>;)
 
 (defcc <as>
-  a <as>; 
-  a;) 
+  a <as>;
+  a;)
 
 (defcc <bs>
-b <bs>; 
-b; 
-<e>;) 
+b <bs>;
+b;
+<e>;)
 
 (defcc <cs>
-c <cs>; 
-c;) 
+c <cs>;
+c;)
 
 (defcc <asbs'cs>
   <as> <bs'> <cs>;)
 
 (defcc <bs'>
-b <bs'>; 
-b; 
+b <bs'>;
+b;
 <e>;)
 
 (defcc <find-digit''>
   <digit''> <morestuff> := <digit''>;
   <digit''> := <digit''>;
-  X <find-digit''> := <find-digit''>;) 
+  X <find-digit''> := <find-digit''>;)
 
 (defcc <digit''>
-  X := X  where (element? X [0 1 2 3 4 5 6 7 8 9]);) 
+  X := X  where (element? X [0 1 2 3 4 5 6 7 8 9]);)
 
 (defcc <anbncn>
-<as> <bs> <cs> := (appendall [<as> <bs> <cs>]) 
-                       where (equal-length? [<as> <bs> <cs>]);) 
+<as> <bs> <cs> := (appendall [<as> <bs> <cs>])
+                       where (equal-length? [<as> <bs> <cs>]);)
 
 (defcc <as>
-a <as>; 
-a;) 
+a <as>;
+a;)
 
 (defcc <bs>
-b <bs>; 
-b;) 
+b <bs>;
+b;)
 
 (defcc <cs>
-c <cs>; 
-c;) 
+c <cs>;
+c;)
 
 (define equal-length?
 [] -> true
@@ -113,18 +113,18 @@ c;)
 
 (define appendall
 [] -> []
-[L | Ls] -> (append L (appendall Ls))) 
+[L | Ls] -> (append L (appendall Ls)))
 
 (defcc <a*s>
    [a] := a;)
-   
+
  (defcc <b*>
   [b] b;)
-  
+
  (defcc <c*>
    [<c*>] := [<c*>];
    c;)
-   
+
  (defcc <d*>
     [<d*>] <d*> := [[<d*>] | <d*>];
     d <d*> := [d | <d*>];
