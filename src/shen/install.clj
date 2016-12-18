@@ -81,7 +81,7 @@
                                         [(project-version)])]
                                (map #(shen.primitives/shen-kl-to-clj %)
                                     (remove string? shen))
-                               ['(c/load "shen/overwrite")]
+                               ;; ['(c/load "shen/overwrite")]
                                ['(c/defn -main [] (shen-shen))])))))
 
 (defn install []

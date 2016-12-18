@@ -1,8 +1,43 @@
+\*                                                   
+
+Copyright (c) 2010-2015, Mark Tarver
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+3. The name of Mark Tarver may not be used to endorse or promote products
+   derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY Mark Tarver ''AS IS'' AND ANY
+EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL Mark Tarver BE LIABLE FOR ANY
+DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.c#34;
+
+
+
+*\
+
+(package shen []
+
 (defcc <defprolog>
-  <predicate*> <clauses*> := (hd (prolog->shen  (map (/. X (insert-predicate <predicate*> X)) <clauses*>)));)
+  <predicate*> <clauses*> 
+  := (hd (prolog->shen (map (/. X (insert-predicate <predicate*> X)) <clauses*>)));)
 
 (define prolog-error
-  F X -> (error "prolog syntax error in ~A here:~%~% ~A~%" F (next-50 50 X)))
+  F [X _] -> (error "prolog syntax error in ~A here:~%~% ~A~%" F (next-50 50 X))
+  F _ -> (error "prolog syntax error in ~A~%" F))
 
 (define next-50
   _ [] -> ""
@@ -17,21 +52,21 @@
   Predicate [Terms Body] -> [[Predicate | Terms] :- Body])   
   
 (defcc <predicate*>
-   -*- := -*-;)  
+   X := X;)  
   
 (defcc <clauses*> 
   <clause*> <clauses*> := [<clause*> | <clauses*>];
-  <e>;)
+  <e> := [];)
   
 (defcc <clause*>
   <head*> <-- <body*> <end*> := [<head*> <body*>];)
   
 (defcc <head*>
   <term*> <head*> := [<term*> | <head*>];
-  <e>;)
+  <e> := [];)
   
 (defcc <term*>
-  -*- := (if (and (not (= <-- -*-)) (legitimate-term? -*-)) (eval-cons -*-) (fail));)
+  X := (eval-cons X)  where (and (not (= <-- X)) (legitimate-term? X));)
 
 (define legitimate-term?
   [cons X Y] -> (and (legitimate-term? X) (legitimate-term? Y))
@@ -47,14 +82,14 @@
   
 (defcc <body*>
   <literal*> <body*> := [<literal*> | <body*>];
-  <e>;)
+  <e> := [];)
   
 (defcc <literal*>
-  ! := [cut Throwcontrol];
-  -*- := (if (cons? -*-) -*- (fail));)  
+  ! := [cut (intern "Throwcontrol")];
+  X := X	where (cons? X);)  
   
 (defcc <end*>
-  -*- := (if (= -*- ;) skip (fail));)  
+  X := X	where (= X ;);)  
 
 (define cut
   Throw ProcessN Continuation -> (let Result (thaw Continuation) 
@@ -69,27 +104,27 @@
    X -> X)
 
 (define s-prolog
-  Clauses -> (map (function eval) (prolog->shen Clauses)))
+  Clauses -> (map (/. X (eval X)) (prolog->shen Clauses)))
 
 (define prolog->shen
-  Clauses -> (map (function compile_prolog_procedure) 
+  Clauses -> (map (/. X (compile_prolog_procedure X)) 
                    (group_clauses 
-                     (map (function s-prolog_clause) 
-                        (mapcan (function head_abstraction) Clauses)))))
+                     (map (/. X (s-prolog_clause X)) 
+                        (mapcan (/. X (head_abstraction X)) Clauses)))))
 
 (define s-prolog_clause
-  [H :- B] -> [H :- (map (function s-prolog_literal) B)])
+  [H :- B] -> [H :- (map (/. X (s-prolog_literal X)) B)])
 
 (define head_abstraction
   [H :- B] -> [[H :- B]]  where (< (complexity_head H) (value *maxcomplexity*))
-  [[F | X] :- B] -> (let Terms (map (/. Y (gensym V)) X)
+  [[F | X] :- B] -> (let Terms (map (/. Y (gensym (protect V))) X)
                          XTerms (rcons_form (remove_modes X))
                          Literal [unify (cons_form Terms) XTerms]
                          Clause [[F | Terms] :- [Literal | B]]
                          [Clause]))
 
 (define complexity_head
-  [_ | Terms] -> (product (map (function complexity) Terms)))
+  [_ | Terms] -> (product (map (/. X (complexity X)) Terms)))
 
 (define complexity
   [mode [mode X Mode] _] -> (complexity [mode X Mode])
@@ -109,23 +144,17 @@
   [when X] -> [fwhen (insert_deref X)]
   [bind X Y] -> [bind X (insert_lazyderef Y)]
   [fwhen X] -> [fwhen (insert_lazyderef X)]
-  [F | X] -> [(m_prolog_to_s-prolog_predicate F) | X])
+  [F | X] -> [F | X])
   
 (define insert_deref
-  V -> [deref V ProcessN]	 where (variable? V)
+  V -> [deref V (protect ProcessN)]	 where (variable? V)
   [X | Y] -> [(insert_deref X) | (insert_deref Y)]
   X -> X)
   
 (define insert_lazyderef
-  V -> [lazyderef V ProcessN]	 where (variable? V)
+  V -> [lazyderef V (protect ProcessN)]	 where (variable? V)
   [X | Y] -> [(insert_lazyderef X) | (insert_lazyderef Y)]
   X -> X)      
-
-(define m_prolog_to_s-prolog_predicate
-  = -> unify
-  =! -> unify!
-  == -> identical
-  F -> F)
 
 (define group_clauses
   [] -> []
@@ -150,18 +179,18 @@
   [[[F | _] | _] | _] -> F)
   
 (define clauses-to-shen
-  F Clauses -> (let Linear (map (function linearise-clause) Clauses)
-                    Arity (prolog-aritycheck F (map (function head) Clauses))
+  F Clauses -> (let Linear (map (/. X (linearise-clause X)) Clauses)
+                    Arity (prolog-aritycheck F (map (/. X (head X)) Clauses))
                     Parameters (parameters Arity) 
                     AUM_instructions (map (/. X (aum X Parameters)) Linear)
-                    Code (catch-cut (nest-disjunct (map (function aum_to_shen) AUM_instructions)))
-                    ShenDef [define F | (append Parameters [ProcessN Continuation] [-> Code])]
+                    Code (catch-cut (nest-disjunct (map (/. X (aum_to_shen X)) AUM_instructions)))
+                    ShenDef [define F | (append Parameters [(protect ProcessN) (protect Continuation)] [-> Code])]
                     ShenDef))
                                         
 (define catch-cut
   Code -> Code     where (not (occurs? cut Code))
-  Code -> [let Throwcontrol [catchpoint]
-              [cutpoint Throwcontrol Code]])
+  Code -> [let (protect Throwcontrol) [catchpoint]
+              [cutpoint (protect Throwcontrol) Code]])
               
 (define catchpoint 
   -> (set *catch* (+ 1 (value *catch*))))                   
@@ -175,10 +204,10 @@
   [Case | Cases] -> (lisp-or Case (nest-disjunct Cases)))  
   
 (define lisp-or
-  P Q -> [let Case P
-              [if [= Case false]
+  P Q -> [let (protect Case) P
+              [if [= (protect Case) false]
                   Q
-                  Case]])
+                  (protect Case)]])
   
 (define prolog-aritycheck
   _ [H] -> (- (length H) 1)
@@ -194,7 +223,7 @@
    [H Tl] -> [(explicit_modes H) :- (cf_help Tl)])
 
 (define explicit_modes
-  [Pred | Terms] -> [Pred | (map (function em_help) Terms)])
+  [Pred | Terms] -> [Pred | (map (/. X (em_help X)) Terms)])
 
 (define em_help
   [mode X M] -> [mode X M]
@@ -215,9 +244,9 @@
           (mu_reduction MuApplication +)))
 
 (define continuation_call
-  Terms Body -> (let VTerms [ProcessN | (extract_vars Terms)]
+  Terms Body -> (let VTerms [(protect ProcessN) | (extract_vars Terms)]
                      VBody (extract_vars Body)
-                     Free (remove Throwcontrol (difference VBody VTerms))
+                     Free (remove (protect Throwcontrol) (difference VBody VTerms))
                      (cc_help Free Body)))                
                  
 (define remove
@@ -245,13 +274,13 @@
    [[mu V Body] FP] Mode 
     -> (subst FP V (mu_reduction Body Mode))     where (ephemeral_variable? V FP)
    [[mu V Body] FP] Mode -> [let V be FP in (mu_reduction Body Mode)] where (variable? V)
-   [[mu C Body] FP] - -> (let Z (gensym V) 
+   [[mu C Body] FP] - -> (let Z (gensym (protect V)) 
                                 [let Z be [the result of dereferencing FP]
                                    in [if [Z is identical to C] 
                                        then (mu_reduction Body -) 
                                        else  
-			               (fail)]])	where (prolog_constant? C)    
-   [[mu C Body] FP] + -> (let Z (gensym V) 
+			               failed!]])	where (prolog_constant? C)    
+   [[mu C Body] FP] + -> (let Z (gensym (protect V)) 
                                 [let Z be [the result of dereferencing FP]
                                    in [if [Z is identical to C] 
                                        then (mu_reduction Body +) 
@@ -260,21 +289,21 @@
 										then
                                         [bind Z to C in (mu_reduction Body +)]
                                         else 
-                                        (fail)]]])		where (prolog_constant? C)
+                                        failed!]]])		where (prolog_constant? C)
    [[mu [X | Y] Body] FP] -
-    -> (let Z (gensym V)
+    -> (let Z (gensym (protect V))
 		    [let Z be [the result of dereferencing FP]
      			   in [if [Z is a non-empty list]
                        then 
-         			   (mu_reduction [[mu X [[mu Y Body] [the tail of Z]]] [the head of Z]] -)
+         	  (mu_reduction [[mu X [[mu Y Body] [the tail of Z]]] [the head of Z]] -)
                        else 
-                       (fail)]])
+                       failed!]])
    [[mu [X | Y] Body] FP] +
-    -> (let Z (gensym V)
+    -> (let Z (gensym (protect V))
 			[let Z be [the result of dereferencing FP]
      		       in [if [Z is a non-empty list]
-                       then 
-         			   (mu_reduction [[mu X [[mu Y Body] [the tail of Z]]] [the head of Z]] +)
+                       then
+      		(mu_reduction [[mu X [[mu Y Body] [the tail of Z]]] [the head of Z]] +)
                        else  
                        [if [Z is a variable]
 					     then 
@@ -282,7 +311,7 @@
                           and then [bind Z to (rcons_form (remove_modes [X | Y])) 
 						  in (mu_reduction Body +)]]
                           else 
-                          (fail)]]])
+                          failed!]]])
   X _ -> X)
 
 (define rcons_form
@@ -305,30 +334,33 @@
 (define aum_to_shen
    [let Z* be AUM1 in AUM2]
     -> [let Z* (aum_to_shen AUM1) (aum_to_shen AUM2)]
-   [the result of dereferencing Z] -> [lazyderef (aum_to_shen Z) ProcessN]
+   [the result of dereferencing Z] -> [lazyderef (aum_to_shen Z) (protect ProcessN)]
    [if AUM1 then AUM2 else AUM3]
     -> [if (aum_to_shen AUM1) (aum_to_shen AUM2) (aum_to_shen AUM3)]
    [Z is a variable] -> [pvar? Z]
    [Z is a non-empty list] -> [cons? Z]
    [rename the variables in [] and then AUM] -> (aum_to_shen AUM)
    [rename the variables in [X | Y] and then AUM] 
-   -> [let X [newpv ProcessN] (aum_to_shen [rename the variables in Y and then AUM])]
-   [bind Z to X in AUM] -> [do [bindv Z (chwild X) ProcessN]
-                               [let Result (aum_to_shen AUM)
-                                    [do [unbindv Z ProcessN]
-                                        Result]]]
+   -> [let X [newpv (protect ProcessN)] 
+           (aum_to_shen [rename the variables in Y and then AUM])]
+   [bind Z to X in AUM] -> [do [bindv Z (chwild X) (protect ProcessN)]
+                               [let (protect Result) (aum_to_shen AUM)
+                                    [do [unbindv Z (protect ProcessN)]
+                                        (protect Result)]]]
    [Z is identical to X] -> [= X Z]   
-   Fail -> false  where (= Fail (fail)) 
+   failed! -> false   
    [the head of X] -> [hd X]
    [the tail of X] -> [tl X]
-   [pop the stack] -> [do [incinfs] [thaw Continuation]]
+   [pop the stack] -> [do [incinfs] [thaw (protect Continuation)]]
    [call the continuation Body] 
-   -> [do [incinfs] (call_the_continuation (chwild Body) ProcessN Continuation)]
+   -> [do [incinfs] (call_the_continuation (chwild Body) 
+                                           (protect ProcessN)
+                                           (protect Continuation))]
    X -> X)  
  
 (define chwild
-   X -> [newpv ProcessN]   where (= X _)
-   [X | Y] -> (map (function chwild) [X | Y])
+   X -> [newpv (protect ProcessN)]   where (= X _)
+   [X | Y] -> (map (/. Z (chwild Z)) [X | Y])
    X -> X)     
    
 (define newpv 
@@ -371,7 +403,7 @@
   N -> (address-> (address-> (absvector 2) 0 pvar) 1 N))  
 
 (define pvar?
-  X -> (and (absvector? X) (= (<-address X 0) pvar)))
+  X -> (trap-error (and (absvector? X) (= (<-address X 0) pvar)) (/. E false)))
 
 (define bindv
   Var Val N -> (let Vector (<-address (value *prologvectors*) N)
@@ -488,7 +520,7 @@
 
 (define call 
   [F | X] ProcessN Continuation 
-   -> (call-help (m_prolog_to_s-prolog_predicate (lazyderef F ProcessN)) X ProcessN Continuation)
+   -> (call-help (function (lazyderef F ProcessN)) X ProcessN Continuation)
    _ _ _ -> false)
   
 (define call-help
@@ -532,3 +564,4 @@
                                (fillvector (vector 10) 1 10 -null-))
             Counter (address-> (value *varcounter*) N 1)
             N))
+)

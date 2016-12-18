@@ -1,19 +1,46 @@
+\*                                                   
+
+Copyright (c) 2010-2015, Mark Tarver
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+3. The name of Mark Tarver may not be used to endorse or promote products
+   derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY Mark Tarver ''AS IS'' AND ANY
+EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL Mark Tarver BE LIABLE FOR ANY
+DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.c#34;
+
+
+*\
+
+(package shen []
+
 (define shen 
   -> (do (credits) (loop)))
 
 (define loop
    -> (do (initialise_environment)
           (prompt) 
-          (trap-error (read-evaluate-print) (/. E (pr (error-to-string E) (value *stoutput*)))) 
+          (trap-error (read-evaluate-print) (/. E (pr (error-to-string E) (stoutput)))) 
           (loop)))
 
-(define version
-  S -> (set *version* S))
-
-(version "version 7.1")
-
 (define credits
- -> (do (output "~%Shen 2010, copyright (C) 2010 Mark Tarver~%")
+ -> (do (output "~%Shen, copyright (C) 2010-2015 Mark Tarver~%")
         (output "www.shenlanguage.org, ~A~%" (value *version*)) 
         (output "running under ~A, implementation: ~A" (value *language*) (value *implementation*))
         (output "~%port ~A ported by ~A~%" (value *port*) (value *porters*))))
@@ -26,7 +53,7 @@
   [S V | M] -> (do (set S V) (multiple-set M)))
                  
 (define destroy
-  F -> (declare F []))
+  F -> (declare F symbol))
 
 (set *history* [])
 
@@ -39,6 +66,8 @@
           (toplevel Parsed)))
 
 (define retrieve-from-history-if-needed
+   (@p Line [C | Cs]) H -> (retrieve-from-history-if-needed (@p Line Cs) H)  
+						where (element? C [(space) (newline)]) 
    (@p _ [C1 C2]) [H | _] -> (let PastPrint (prbytes (snd H))
                                     H)  where (and (= C1 (exclamation)) (= C2 (exclamation)))
    (@p _ [C | Key]) H -> (let Key? (make-key Key H)
@@ -59,23 +88,24 @@
   ->  33) 
 
 (define prbytes
-  Bytes -> (do (map (/. Byte (pr (n->string Byte))) Bytes) 
+  Bytes -> (do (map (/. Byte (pr (n->string Byte) (stoutput))) Bytes) 
                (nl)))
 
 (define update_history 
   Lineread History -> (set *history* [Lineread  | History]))   
 
 (define toplineread
-  -> (toplineread_loop (read-byte) []))
+  -> (toplineread_loop (read-byte (stinput)) []))
 
 (define toplineread_loop
   Byte _ -> (error "line read aborted")  where (= Byte (hat))
-  Byte Bytes -> (let Line (compile (function <st_input>) Bytes)
-                    (if (or (= Line (fail)) (empty? Line))
-                        (toplineread_loop (read-byte) (append Bytes [Byte]))
+  Byte Bytes -> (let Line (compile (/. X (<st_input> X)) Bytes (/. E nextline))
+                     It (record-it Bytes)
+                    (if (or (= Line nextline) (empty? Line))
+                        (toplineread_loop (read-byte (stinput)) (append Bytes [Byte]))
                         (@p Line Bytes)))
                             	where (element? Byte [(newline) (carriage-return)])
-  Byte Bytes -> (toplineread_loop (read-byte) (append Bytes [Byte])))
+  Byte Bytes -> (toplineread_loop (read-byte (stinput)) (append Bytes [Byte])))
 
 (define hat
   -> 94)
@@ -106,7 +136,7 @@
                   F)))
 
 (define make-key
-  Key H -> (let Atom (hd (compile (function <st_input>) Key))
+  Key H -> (let Atom (hd (compile (/. X (<st_input> X)) Key))
               (if (integer? Atom)
                   (/. X (= X (nth (+ Atom 1) (reverse H))))
                   (/. X (prefix? Key (trim-gubbins (snd X)))))))
@@ -150,7 +180,7 @@
   [X Y | Z] Boolean -> (do (toplevel_evaluate [X] Boolean)
                             (nl)
                             (toplevel_evaluate [Y | Z] Boolean))
-  [X] true -> (typecheck-and-evaluate X (gensym A))
+  [X] true -> (typecheck-and-evaluate X (gensym (protect A)))
   [X] false -> (let Eval (eval-without-macros X)
                     (print Eval)))
 
@@ -173,4 +203,4 @@
 (define mult_subst
   [] _ X -> X
   _ [] X -> X
-  [X | Y] [W | Z] A -> (mult_subst Y Z (subst X W A)))
+  [X | Y] [W | Z] A -> (mult_subst Y Z (subst X W A))))

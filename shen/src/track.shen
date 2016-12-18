@@ -1,3 +1,35 @@
+\*                                                   
+
+Copyright (c) 2010-2015, Mark Tarver
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+3. The name of Mark Tarver may not be used to endorse or promote products
+   derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY Mark Tarver ''AS IS'' AND ANY
+EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL Mark Tarver BE LIABLE FOR ANY
+DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.c#34;
+
+
+*\
+
+(package shen []
+
 (define f_error 
   F -> (do (output "partial function ~A;~%" F)
            (if (and (not (tracked? F))
@@ -16,7 +48,7 @@
 (define track-function
   [defun F Params Body]
    -> (let KL [defun F Params (insert-tracking-code F Params Body)]
-           Ob (eval KL)
+           Ob (eval-kl KL)
            Tr (set *tracking* [Ob | (value *tracking*)])
            Ob))
 
@@ -24,11 +56,11 @@
   F Params Body -> [do [set *call* [+ [value *call*] 1]]
                        [do [input-track [value *call*] F (cons_form Params)]
                            [do [terpri-or-read-char]
-                        [let Result Body
-                             [do [output-track [value *call*] F Result]
+                        [let (protect Result) Body
+                             [do [output-track [value *call*] F (protect Result)]
                                  [do [set *call* [- [value *call*] 1]]
                                      [do [terpri-or-read-char]
-                                         Result]]]]]]])
+                                         (protect Result)]]]]]]])
 
 (set *step* false)
 
@@ -87,12 +119,12 @@
    Func -> (untrack Func))
 
 (define profile-func 
-  F Params Code -> [let Start [get-time run]
-                     [let Result Code
-                       [let Finish [- [get-time run] Start]
-                         [let Record 
-                              [put-profile F [+ [get-profile F] Finish]]
-                              Result]]]])
+  F Params Code -> [let (protect Start) [get-time run]
+                     [let (protect Result) Code
+                       [let (protect Finish) [- [get-time run] (protect Start)]
+                         [let (protect Record) 
+                              [put-profile F [+ [get-profile F] (protect Finish)]]
+                              (protect Result)]]]])
 
 (define profile-results 
    F -> (let Results (get-profile F) 
@@ -103,4 +135,4 @@
   F -> (trap-error (get F profile) (/. E 0)))
   
 (define put-profile
-  F Time -> (put F profile Time))
+  F Time -> (put F profile Time)))

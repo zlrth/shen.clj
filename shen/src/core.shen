@@ -1,45 +1,76 @@
+\*                                                   
+
+Copyright (c) 2010-2015, Mark Tarver
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+3. The name of Mark Tarver may not be used to endorse or promote products
+   derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY Mark Tarver ''AS IS'' AND ANY
+EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL Mark Tarver BE LIABLE FOR ANY
+DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.c#34;
+
+
+*\
+
+(package shen [] 
+
 (define shen->kl 
-  F Def -> (compile (function <define>) [F | Def] (/. X (shen-syntax-error F X))))
+  F Def -> (compile (/. X (<define> X)) [F | Def] (/. X (shen-syntax-error F X))))
 
 (define shen-syntax-error
-  F X -> (error "syntax error in ~A here:~%~% ~A~%" F (next-50 50 X)))
+  F [X | Y] -> (error "syntax error in ~A here:~%~% ~A~%" F (next-50 50 X))
+  F _ -> (error "syntax error in ~A~%" F))
 
 (defcc <define>
  <name> <signature> <rules> := (compile_to_machine_code <name> <rules>);
  <name> <rules> := (compile_to_machine_code <name> <rules>);)
 
 (defcc <name>
-  -*- := (if (and (symbol? -*-) (not (sysfunc? -*-))) 
-             -*-
-             (error "~A is not a legitimate function name.~%" -*-)))
+  X := (if (and (symbol? X) (not (sysfunc? X))) 
+           X
+           (error "~A is not a legitimate function name.~%" X)))
 
 (define sysfunc?
-  F -> (element? F (value *system*)))
+  F -> (element? F (get (intern "shen") external-symbols)))
 
 (defcc <signature>
-  { <signature-help> } := (normalise-type (curry-type <signature-help>));)
+  { <signature-help> } := (demodulate (curry-type <signature-help>));)
 
 (define curry-type
   [A --> B --> | C] -> (curry-type [A --> [B --> | C]])
-  [cons A _] -> [list (curry-type A)]
   [A * B * | C] -> (curry-type [A * [B * | C]])
-  [X | Y] -> (map (function curry-type) [X | Y])
+  [X | Y] -> (map (/. Z (curry-type Z)) [X | Y])
   X -> X) 
 
 (defcc <signature-help> 
-  -*- <signature-help> := (if (element? -*- [{ }]) 
-                              (fail)
-                              [-*- | <signature-help>]);
+  X <signature-help> := [X | <signature-help>]  where (not (element? X [{ }]));
  <e> := [];)
 
 (defcc <rules>
-  <rule> <rules> := [<rule> | <rules>];
-  <rule> := [<rule>];)
+  <rule> <rules> := [(linearise <rule>) | <rules>];
+  <rule> := [(linearise <rule>)];)
   
 (defcc <rule>
   <patterns> -> <action> where <guard> := [<patterns> [where <guard> <action>]];
   <patterns> -> <action> := [<patterns> <action>];
-  <patterns> <- <action> where <guard> := [<patterns> [where <guard> [choicepoint! <action>]]];
+  <patterns> <- <action> where <guard> 
+    := [<patterns> [where <guard> [choicepoint! <action>]]];
   <patterns> <- <action> := [<patterns> [choicepoint! <action>]];)   
 
 (define fail_if
@@ -59,14 +90,15 @@
   [@v <pattern1> <pattern2>] := [@v <pattern1> <pattern2>];
   [@s <pattern1> <pattern2>] := [@s <pattern1> <pattern2>];
   [vector 0] := [vector 0];
-  -*- := (if (cons? -*-) 
-             (error "~A is not a legitimate constructor~%" -*-) 
-             (fail));
+  X := (constructor-error X) 	where (cons? X);
   <simple_pattern> := <simple_pattern>;)
 
+(define constructor-error
+  X -> (error "~A is not a legitimate constructor~%" X))
+
 (defcc <simple_pattern>
-  -*- := (if (= -*- _) (gensym X) (fail));
-  -*- := (if (element? -*- [-> <-]) (fail) -*-);)
+  X := (gensym (protect Y)) 	where (= X _);
+  X := X 		        where (not (element? X [-> <-]));)
 
 (defcc <pattern1>
   <pattern> := <pattern>;)
@@ -75,10 +107,10 @@
   <pattern> := <pattern>;)
 
 (defcc <action>
-  -*- := -*-;)
+  X := X;)
 
 (defcc <guard>
-  -*- := -*-;)
+  X := X;)
 
 (define compile_to_machine_code 
   Name Rules -> (let Lambda+ (compile_to_lambda+ Name Rules)
@@ -92,14 +124,26 @@
 
 (define compile_to_lambda+
   Name Rules -> (let Arity (aritycheck Name Rules)
+                     UpDateSymbolTable (update-symbol-table Name Arity)
                      Free (map (/. Rule (free_variable_check Name Rule)) Rules)
                      Variables (parameters Arity)
-                     Linear (map (function linearise) (strip-protect Rules))
-                     Abstractions (map (function abstract_rule) Linear)
+                     Strip (map (/. X (strip-protect X)) Rules)
+                     Abstractions (map (/. X (abstract_rule X)) Strip)
                      Applications 
                        (map (/. X (application_build Variables X))
                             Abstractions)
                      [Variables Applications]))
+
+(define update-symbol-table
+  Name Arity -> (set *symbol-table* (update-symbol-table-h Name Arity (value *symbol-table*) [])))
+
+(define update-symbol-table-h 
+  Name Arity [] SymbolTable -> (let NewEntry [Name | (eval-kl (lambda-form Name Arity))]
+                                    [NewEntry | SymbolTable])
+  Name Arity [[Name | _] | Entries] SymbolTable 
+   -> (let ChangedEntry [Name | (eval-kl (lambda-form Name Arity))]
+           (append Entries [ChangedEntry | SymbolTable]))
+  Name Arity [Entry | Entries] SymbolTable -> (update-symbol-table-h Name Arity Entries [Entry | SymbolTable]))
 
 (define free_variable_check
   Name [Patts Action] -> (let Bound (extract_vars Patts)
@@ -112,7 +156,7 @@
   X -> [])
 
 (define extract_free_vars
-  Bound [protect _] -> []
+  Bound [P _] -> []  where (= P protect)
   Bound X -> [X]	where (and (variable? X) (not (element? X Bound)))
   Bound [lambda X Y] -> (extract_free_vars [X | Bound] Y)
   Bound [let X Y Z] -> (union (extract_free_vars Bound Y) 
@@ -130,8 +174,8 @@
   [V | Vs] -> (cn (str V) (cn ", " (list_variables Vs))))
 
 (define strip-protect
-  [protect X] -> X
-  [X | Y] -> [(strip-protect X) | (strip-protect Y)]
+  [P X] -> (strip-protect X)   where (= P protect)
+  [X | Y] -> (map (/. Z (strip-protect Z)) [X | Y])
   X -> X)
                         
 (define linearise
@@ -163,7 +207,7 @@
   Name [[Patts Action]] -> (do (aritycheck-action Action) (aritycheck-name Name (arity Name) (length Patts)))
   Name [[Patts1 Action1] [Patts2 Action2] | Rules] 
   -> (if (= (length Patts1) (length Patts2))
-         (do (aritycheck-action Action) (aritycheck Name [[Patts2 Action2] | Rules]))
+         (do (aritycheck-action Action1) (aritycheck Name [[Patts2 Action2] | Rules]))
          (error "arity error in ~A~%" Name)))
 
 (define aritycheck-name
@@ -172,7 +216,7 @@
   Name _ Arity -> (do (output "~%warning: changing the arity of ~A can cause errors.~%" Name) Arity))
 
 (define aritycheck-action
-  [F | X] -> (do (aah F X) (map (function aritycheck-action) [F | X]))
+  [F | X] -> (do (aah F X) (map (/. Y (aritycheck-action Y)) [F | X]))
   _ -> skip)
 
 (define aah
@@ -191,7 +235,7 @@
    
 (define parameters
   0 -> []
-  N -> [(gensym V) | (parameters (- N 1))])
+  N -> [(gensym (protect V)) | (parameters (- N 1))])
 
 (define application_build
   [] Application -> Application
@@ -200,11 +244,49 @@
 (define compile_to_kl
   Name [Variables Applications] 
    -> (let Arity (store-arity Name (length Variables))
-           Reduce (map (function reduce) Applications)
+           Reduce (map (/. X (reduce X)) Applications)
            CondExpression (cond-expression Name Variables Reduce)
-           KL [defun Name Variables CondExpression]
+           TypeTable (if (value *optimise*) (typextable (get-type Name) Variables) skip)
+           TypedCondExpression (if (value *optimise*) (assign-types Variables TypeTable CondExpression) CondExpression)
+           KL [defun Name Variables TypedCondExpression] 
            KL))
+           
+(define get-type
+  [_ | _] -> skip
+  F -> (let FType (assoc F (value *signedfuncs*))
+            (if (empty? FType)
+                skip
+                (tl FType))))           
 
+(define typextable
+  [A --> B] [V | Vs] -> (if (variable? A) 
+                            (typextable B Vs)
+                            [[V | A] | (typextable B Vs)])
+  _ _ -> [])
+
+(define assign-types
+  Bound Table [let X Y Z] -> [let X 
+                                 (assign-types Bound Table Y) 
+                                 (assign-types [X | Bound] Table Z)]
+  Bound Table [lambda X Y] 
+              -> [lambda X (assign-types [X | Bound] Table Y)]     
+  Bound Table [cond | X] -> [cond | (map (/. Y [(assign-types Bound Table (hd Y)) 
+                                                (assign-types Bound Table (hd (tl Y)))]) X)]                           
+  Bound Table [F | X] -> (let NewTable (typextable (get-type F) X)
+                              [F | (map (/. Y (assign-types Bound (append Table NewTable) Y)) X)])
+
+  Bound Table Atom -> (let AtomType (assoc Atom Table)
+                         (cases (cons? AtomType) [type Atom (tl AtomType)]
+                                (element? Atom Bound) Atom
+                                true (atom-type Atom))))
+                             
+(define atom-type
+  Atom -> (cases (string? Atom) [type Atom string]
+                 (number? Atom) [type Atom number]                                
+                 (boolean? Atom) [type Atom boolean]
+                 (symbol? Atom) [type Atom symbol]
+                 true Atom))
+                 
 (define store-arity
   _ _ -> skip    where (value *installing-kl*)
   F Arity -> (put F arity Arity))
@@ -253,7 +335,8 @@
 
 (define ebr
   A B B -> A
-  A B [/. C D] -> [/. C D]	where (> (occurrences B C) 0)
+  A B [/. C D] -> [/. C D]	   where (> (occurrences B C) 0)
+  A B [lambda C D] -> [lambda C D] where (> (occurrences B C) 0)
   A B [let B C D] -> [let B (ebr A B C) D]	
   A B [C | D] -> [(ebr A B C) | (ebr A B D)]
   _ _ C -> C)  
@@ -269,26 +352,28 @@
 
 (define cond-form
   [[true Result] | _] -> Result	
-  \[let X Y Z] -> [let X Y Z]\
   Cases -> [cond | Cases])
   
 (define encode-choices
   [] _ -> []  
-  [[true [choicepoint! Action]]] Name -> [[true [let Result Action
-                                                  [if [= Result [fail]]
-                                                      (if (value *installing-kl*) [sys-error Name] [f_error Name])
-                                                      Result]]]]   
-  [[true [choicepoint! Action]] | Code] Name -> [[true [let Result Action
-                                                               [if [= Result [fail]]
-                                                                   (cond-form (encode-choices Code Name))
-                                                                   Result]]]]
-  [[Test [choicepoint! Action]] | Code] Name -> [[true [let Freeze [freeze (cond-form (encode-choices Code Name))]
-                                                             [if Test
-                                                                 [let Result Action
-                                                                      [if [= Result [fail]]
-                                                                          [thaw Freeze]
-                                                                          Result]]
-                                                                 [thaw Freeze]]]]]
+  [[true [choicepoint! Action]]] Name 
+  -> [[true [let (protect Result) Action
+                 [if [= (protect Result) [fail]]
+                  (if (value *installing-kl*) [sys-error Name] [f_error Name])
+                    (protect Result)]]]]   
+  [[true [choicepoint! Action]] | Code] Name 
+   -> [[true [let (protect Result) Action
+             [if [= (protect Result) [fail]]
+              (cond-form (encode-choices Code Name))
+              (protect Result)]]]]
+  [[Test [choicepoint! Action]] | Code] Name 
+   -> [[true [let (protect Freeze) [freeze (cond-form (encode-choices Code Name))]
+                 [if Test
+                     [let (protect Result) Action
+                          [if [= (protect Result) [fail]]
+                              [thaw (protect Freeze)]
+                              (protect Result)]]
+                              [thaw (protect Freeze)]]]]]
   [[Test Result] | Code] Name -> [[Test Result] | (encode-choices Code Name)])   
 
 (define case-form
@@ -303,8 +388,7 @@
   [Test | Tests] -> [and Test (embed-and Tests)])
 
 (define err-condition
-  Name -> [true [sys-error Name]]    where (value *installing-kl*)
   Name -> [true [f_error Name]])
 
 (define sys-error
-  Name -> (error "system function ~A: unexpected argument~%" Name))
+  Name -> (error "system function ~A: unexpected argument~%" Name)) )

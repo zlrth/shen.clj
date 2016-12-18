@@ -1,104 +1,136 @@
-(set *symbolcodes* (vector 128))   
-                  
-(address-> (value *symbolcodes*)  126 "~")
-(address-> (value *symbolcodes*)  122  "z")
-(address-> (value *symbolcodes*)  121  "y")
-(address-> (value *symbolcodes*)  120  "x")
-(address-> (value *symbolcodes*)  119  "w")
-(address-> (value *symbolcodes*)  118  "v")
-(address-> (value *symbolcodes*)  117  "u")
-(address-> (value *symbolcodes*)  116  "t")
-(address-> (value *symbolcodes*)  115  "s")
-(address-> (value *symbolcodes*)  114  "r")
-(address-> (value *symbolcodes*)  113  "q")
-(address-> (value *symbolcodes*)  112  "p")
-(address-> (value *symbolcodes*)  111  "o")
-(address-> (value *symbolcodes*)  110  "n")
-(address-> (value *symbolcodes*)  109  "m")
-(address-> (value *symbolcodes*)  108  "l")
-(address-> (value *symbolcodes*)  107  "k")
-(address-> (value *symbolcodes*)  106  "j")
-(address-> (value *symbolcodes*)  105  "i")
-(address-> (value *symbolcodes*)  104  "h")
-(address-> (value *symbolcodes*)  103  "g")
-(address-> (value *symbolcodes*)  102  "f")
-(address-> (value *symbolcodes*)  101  "e")
-(address-> (value *symbolcodes*)  100  "d")
-(address-> (value *symbolcodes*)  99  "c")
-(address-> (value *symbolcodes*)  98  "b")
-(address-> (value *symbolcodes*)  97  "a")
-(address-> (value *symbolcodes*)  96  "`")
-(address-> (value *symbolcodes*)  95  "_")
-(address-> (value *symbolcodes*)  90  "Z")
-(address-> (value *symbolcodes*)  89  "Y")
-(address-> (value *symbolcodes*)  88  "X")
-(address-> (value *symbolcodes*)  87  "W")
-(address-> (value *symbolcodes*)  86  "V")
-(address-> (value *symbolcodes*)  85  "U")
-(address-> (value *symbolcodes*)  84  "T")
-(address-> (value *symbolcodes*)  83  "S")
-(address-> (value *symbolcodes*)  82  "R")
-(address-> (value *symbolcodes*)  81  "Q")
-(address-> (value *symbolcodes*)  80  "P")
-(address-> (value *symbolcodes*)  79  "O")
-(address-> (value *symbolcodes*)  78  "N")
-(address-> (value *symbolcodes*)  77  "M")
-(address-> (value *symbolcodes*)  76  "L")
-(address-> (value *symbolcodes*)  75  "K")
-(address-> (value *symbolcodes*)  74  "J")
-(address-> (value *symbolcodes*)  73  "I")
-(address-> (value *symbolcodes*)  72  "H")
-(address-> (value *symbolcodes*)  71  "G")
-(address-> (value *symbolcodes*)  70  "F")
-(address-> (value *symbolcodes*)  69  "E")
-(address-> (value *symbolcodes*)  68  "D")
-(address-> (value *symbolcodes*)  67  "C")
-(address-> (value *symbolcodes*)  66  "B")
-(address-> (value *symbolcodes*)  65  "A")
-(address-> (value *symbolcodes*)  64  "@")
-(address-> (value *symbolcodes*)  63  "?")
-(address-> (value *symbolcodes*)  62  ">")
-(address-> (value *symbolcodes*)  61  "=")
-(address-> (value *symbolcodes*)  60  "<")
-(address-> (value *symbolcodes*)  57  "9")
-(address-> (value *symbolcodes*)  56  "8")
-(address-> (value *symbolcodes*)  55  "7")
-(address-> (value *symbolcodes*)  54  "6")
-(address-> (value *symbolcodes*)  53  "5")
-(address-> (value *symbolcodes*)  52  "4")
-(address-> (value *symbolcodes*)  51  "3")
-(address-> (value *symbolcodes*)  50  "2")
-(address-> (value *symbolcodes*)  49  "1")
-(address-> (value *symbolcodes*)  48  "0")
-(address-> (value *symbolcodes*)  47  "/")
-(address-> (value *symbolcodes*)  46  ".")
-(address-> (value *symbolcodes*)  45  "-")
-(address-> (value *symbolcodes*)  43  "+")
-(address-> (value *symbolcodes*)  42  "*")
-(address-> (value *symbolcodes*)  39  "'")
-(address-> (value *symbolcodes*)  38  "&")
-(address-> (value *symbolcodes*)  37  "%")
-(address-> (value *symbolcodes*)  36  "$")
-(address-> (value *symbolcodes*)  35  "#")
-(address-> (value *symbolcodes*)  33  "!")     
+\*                                                   
+
+Copyright (c) 2010-2015, Mark Tarver
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+3. The name of Mark Tarver may not be used to endorse or promote products
+   derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY Mark Tarver ''AS IS'' AND ANY
+EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL Mark Tarver BE LIABLE FOR ANY
+DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.c#34;
+
+
+
+*\
+
+(package shen []
+
+(define read-file-as-bytelist
+ File -> (let Stream (open File in)
+               Byte (read-byte Stream)
+               Bytes (read-file-as-bytelist-help Stream Byte [])
+               Close (close Stream)
+               (reverse Bytes)))  
+
+(define read-file-as-bytelist-help
+  Stream -1 Bytes -> Bytes
+  Stream Byte Bytes -> (read-file-as-bytelist-help Stream (read-byte Stream) [Byte | Bytes]))
+
+(define read-file-as-string
+   File -> (let Stream (open File in) 
+               (rfas-h Stream (read-byte Stream) "")))
+               
+(define rfas-h
+  Stream -1 String -> (do (close Stream) String)
+  Stream N String -> (rfas-h Stream (read-byte Stream) (cn String (n->string N))))  
+
+(define input
+  Stream -> (eval-kl (read Stream)))
+
+(define input+ 
+  Type Stream -> (let Mono? (monotype Type)
+                      Input (read Stream)                      
+                      (if (= false (typecheck Input (demodulate Type)))
+                          (error "type error: ~R is not of type ~R~%" Input Type)
+                          (eval-kl Input))))
+
+(define monotype
+  [X | Y] -> (map (/. Z (monotype Z)) [X | Y])
+  X -> (if (variable? X) (error "input+ expects a monotype: not ~A~%" X) X))
+
+(define read
+  Stream -> (hd (read-loop Stream (read-byte Stream) [])))
+  
+(define it 
+  -> (value *it*))  
+
+(define read-loop
+  _ 94 Bytes -> (error "read aborted")
+  _ -1 Bytes -> (if (empty? Bytes)
+                    (simple-error "error: empty stream")
+                    (compile (/. X (<st_input> X)) Bytes (/. E E)))
+  Stream Byte Bytes -> (let AllBytes (append Bytes [Byte])
+                            It (record-it AllBytes)
+                            Read (compile (/. X (<st_input> X)) AllBytes (/. E nextbyte))
+                            (if (or (= Read nextbyte) (empty? Read))
+                                (read-loop Stream (read-byte Stream) AllBytes)
+                                Read))    where (terminator? Byte) 
+  Stream Byte Bytes -> (read-loop Stream (read-byte Stream) (append Bytes [Byte])))   
+  
+(define terminator?
+  Byte -> (element? Byte [9 10 13 32 34 41 93]))           
 
 (define lineread
-  -> (lineread-loop (read-byte) []))
+  Stream -> (lineread-loop (read-byte Stream) [] Stream))
 
 (define lineread-loop
-  Byte _ -> (error "line read aborted")  where (= Byte (hat))
-  Byte Bytes -> (let Line (compile (function <st_input>) Bytes [])
-                      (if (or (= Line (fail)) (empty? Line))
-                          (lineread-loop (read-byte) (append Bytes [Byte]))
-                          Line))	where (element? Byte [(newline) (carriage-return)])
-  Byte Bytes -> (lineread-loop (read-byte) (append Bytes [Byte])))
+  -1 Bytes Stream -> (if (empty? Bytes)
+                         (simple-error "empty stream")
+                         (compile (/. X (<st_input> X)) Bytes (/. E E)))
+  Byte _ Stream -> (error "line read aborted")  where (= Byte (hat))
+  Byte Bytes Stream -> (let Line (compile (/. X (<st_input> X)) Bytes (/. E nextline))
+                            It (record-it Bytes)
+                            (if (or (= Line nextline) (empty? Line))
+                                (lineread-loop (read-byte Stream) (append Bytes [Byte]) Stream)
+                                Line))	where (element? Byte [(newline) (carriage-return)])
+  Byte Bytes Stream -> (lineread-loop (read-byte Stream) (append Bytes [Byte]) Stream))
+
+(define record-it
+  Bytes -> (let TrimLeft (trim-whitespace Bytes)
+                TrimRight (trim-whitespace (reverse TrimLeft))
+                Trimmed (reverse TrimRight)
+                (record-it-h Trimmed)))
+                
+(define trim-whitespace
+  [Byte | Bytes] -> (trim-whitespace Bytes)   where (element? Byte [9 10 13 32])
+  Bytes -> Bytes)               
+                
+(define record-it-h
+  Bytes -> (do (set *it* (cn-all (map (/. X (n->string X)) Bytes))) Bytes))
+
+(define cn-all
+  [] -> ""
+  [S | Ss] -> (cn S (cn-all Ss)))
 
 (define read-file
   File -> (let Bytelist (read-file-as-bytelist File)
-               (compile (function <st_input>) Bytelist (function read-error))))
+               (compile (/. X (<st_input> X)) Bytelist (/. X (read-error X)))))
+
+(define read-from-string
+  S -> (let Ns (map (/. X (string->n X)) (explode S))
+            (compile (/. X (<st_input> X)) 
+                     Ns 
+                     (/. X (read-error X)))))
 
 (define read-error
-  Bytes -> (error "read error here:~%~% ~A~%" (compress-50 50 Bytes)))
+  [[Byte | Bytes] _] -> (error "read error here:~%~% ~A~%" (compress-50 50 [Byte | Bytes]))
+  _ -> (error "read error~%"))
 
 (define compress-50
   _ [] -> ""
@@ -117,52 +149,54 @@
   <colon> <equal> <st_input> := [:= | <st_input>];
   <colon> <minus> <st_input> := [:- | <st_input>];
   <colon> <st_input> := [: | <st_input>];
-  <comma> <st_input> := [, | <st_input>];
+  <comma> <st_input> := [(intern ",") | <st_input>];
   <comment> <st_input> := <st_input>;
   <atom> <st_input> := [(macroexpand <atom>) | <st_input>];
   <whitespaces> <st_input> := <st_input>;
   <e> := [];)
   
 (defcc <lsb>
-   -*- := (if (= -*- 91) skip (fail));)  
+   91 := skip;)  
    
 (defcc <rsb>
-   -*- := (if (= -*- 93) skip (fail));)     
+   93 := skip;)     
   
 (defcc <lcurly>
-  -*- := (if (= -*- 123) skip (fail));)
+  123 := skip;)
   
 (defcc <rcurly>
-  -*- := (if (= -*- 125) skip (fail));)
+  125 := skip;)
   
 (defcc <bar>
-  -*- := (if (= -*- 124) skip (fail));)  
+  124 := skip;)  
   
 (defcc <semicolon>
-  -*- := (if (= -*- 59) skip (fail));) 
+  59 := skip;) 
   
 (defcc <colon>
-  -*- := (if (= -*- 58) skip (fail));)     
+  58 := skip;)     
       
 (defcc <comma>
-  -*- := (if (= -*- 44) skip (fail));)  
+  44 := skip;)  
   
 (defcc <equal>
-   -*- := (if (= -*- 61) skip (fail));)     
+  61 := skip;)     
    
 (defcc <minus>
-   -*- := (if (= -*- 45) skip (fail));)      
+  45 := skip;)      
   
 (defcc <lrb>
-  -*- := (if (= -*- 40) skip (fail));)
+  40 := skip;)
   
 (defcc <rrb>
-  -*- := (if (= -*- 41) skip (fail));)   
+  41 := skip;)   
   
 (defcc <atom>
   <str> := (control-chars <str>); 
-  <number>; 
-  <sym>;)
+  <number> := <number>; 
+  <sym> := (if (= <sym> "<>")
+               [vector 0]
+               (intern <sym>));)
 
 (define control-chars
   [] -> ""
@@ -200,23 +234,20 @@
    _ -> [])
 
 (defcc <sym>
-  <alpha> <symchars> := (intern (cn <alpha> <symchars>));
-  <alpha> := (intern <alpha>);)
-  
-(defcc <symchars>
-   <symchar> <symchars> := (cn <symchar> <symchars>);
-   <symchar> := <symchar>;)  
+  <alpha> <alphanums> := (@s <alpha> <alphanums>);)
+
+(defcc <alphanums>
+   <alphanum> <alphanums> := (@s <alphanum> <alphanums>);
+   <e> := "";)  
    
-(defcc <symchar>
-    <alpha>;
-    <digit->string>;)
+(defcc <alphanum>
+    <alpha> := <alpha>;
+    <num> := <num>;) 	
 
-(defcc <digit->string>   
-  -*- := (if (digit-byte? -*-) 
-             (n->string -*-) 
-             (fail));)   
+(defcc <num>
+  Byte := (n->string Byte)    where (numbyte? Byte);)
 
-(define digit-byte?
+(define numbyte?
   48 -> true
   49 -> true
   50 -> true
@@ -230,32 +261,31 @@
   _ -> false)
    
 (defcc <alpha>
-  -*- := (let S (symbol-byte->string -*-)
-             (if (= S (fail))  
-                 (fail)
-                 S));)
-                 
-(define symbol-byte->string
-  Byte -> (<-address (value *symbolcodes*) Byte))              
+  Byte := (n->string Byte)	  where (symbol-code? Byte);)
+
+(define symbol-code?
+  N -> (or (= N 126)
+           (and (> N 94) (< N 123))
+           (and (> N 59) (< N 91))
+           (and (> N 41) (< N 58) (not (= N 44)))
+           (and (> N 34) (< N 40))
+           (= N 33)))
   
 (defcc <str>
   <dbq> <strcontents> <dbq> := <strcontents>;)
   
 (defcc <dbq>
-  -*- := (if (= -*- 34) skip (fail));)    
+  Byte := Byte	where (= Byte 34);)    
   
 (defcc <strcontents>
   <strc> <strcontents> := [<strc> | <strcontents>];
   <e> := [];)
   
 (defcc <byte>
-  -*- := (n->string -*-);)  
+  Byte := (n->string Byte);)  
   
 (defcc <strc>
-  -*- := (if (= -*- 34) (fail) (n->string -*-));)
-  
-(defcc <backslash>
-  -*- := (if (= -*- 92) skip (fail));)
+  Byte := (n->string Byte)	where (not (= Byte 34));)
   
 (defcc <number>
    <minus> <number> := (- 0 <number>);
@@ -268,31 +298,31 @@
    <digits> := (pre (reverse <digits>) 0);)
 
 (defcc <E>
-   101;)
+   101 := skip;)
 
 (defcc <log10>
   <minus> <digits> := (- 0 (pre (reverse <digits>) 0));
   <digits> := (pre (reverse <digits>) 0);)
    
 (defcc <plus>
-  -*- := (if (= -*-  43) skip (fail));)
+  Byte := Byte 	where (= Byte 43);)
   
 (defcc <stop>
-  -*- := (if (= -*- 46) skip (fail));)      
+  Byte := Byte 	where (= Byte 46);)      
    
 (defcc <predigits>
-    <digits>;
+    <digits> := <digits>;
     <e> := [];)
     
 (defcc <postdigits>
-    <digits>;)
+  <digits> := <digits>;)
 
 (defcc <digits>
    <digit> <digits> := [<digit> | <digits>];
    <digit> := [<digit>];)
  
 (defcc <digit>
-  -*- := (if (digit-byte? -*-) (byte->digit -*-) (fail));)
+  X := (byte->digit X)  where (numbyte? X);)
   
 (define byte->digit  
   48 -> 0   
@@ -326,38 +356,50 @@
   <st_input> := <st_input>;)
 
 (defcc <comment>
-  <backslash> <times> <any> <times> <backslash> := skip;)  
+  <singleline> := skip;
+  <multiline> := skip;)
+
+(defcc <singleline>
+  <backslash> <backslash> <anysingle> <return> := skip;)
+
+(defcc <backslash>
+  92 := skip;)
+
+(defcc <anysingle>
+   <non-return> <anysingle> := skip;
+   <e> := skip;)
+
+(defcc <non-return>
+   X :=  skip   where (not (element? X [10 13]));)
+
+(defcc <return>
+  X  := skip  where (element? X [10 13]);)
  
+(defcc <multiline>
+  <backslash> <times> <anymulti> := skip;)
+
 (defcc <times>
-  -*- := (if (= -*- 42) skip (fail));)       
+  42 := skip;)       
 
-(defcc <any>
-  <comment> <any> := skip;
-  <blah> <any> := skip;
-  <e> := skip;)
-
-(defcc <blah>
-  -*- := (if (end-of-comment? -s-) (fail) skip);)
-
-(define end-of-comment?
-  [42 92 | _] -> true   
-  _ -> false)  
+(defcc <anymulti>
+  <comment> <anymulti> := skip;
+  <times> <backslash> := skip;
+  X <anymulti> := skip;)
 
 (defcc <whitespaces>
   <whitespace> <whitespaces> := skip;
   <whitespace> := skip;)
 
 (defcc <whitespace>
-  -*- := (let Case -*-
-              (cases (= Case 32) skip 
-                     (= Case 13) skip
-                     (= Case 10) skip
-                     (= Case 9) skip
-                     true (fail)));)                      
+  X := skip     where (let Case X
+                      (or (= Case 32) 
+                          (= Case 13) 
+                          (= Case 10) 
+                          (= Case 9)));)                      
 
 (define cons_form
   [] -> []
-  [X bar! Y] -> [cons X Y]	
+  [X Bar Y] -> [cons X Y]	  where (= Bar bar!)
   [X | Y] -> [cons X (cons_form Y)])  
  
 (define package-macro
@@ -365,28 +407,43 @@
     [package null _ | Code] Stream -> (append Code Stream)
     [package PackageName Exceptions | Code] Stream
      -> (let ListofExceptions (eval-without-macros Exceptions)
-             Record (record-exceptions ListofExceptions PackageName)
-             (append (packageh PackageName ListofExceptions Code) Stream))
+             External (record-exceptions ListofExceptions PackageName)
+             PackageNameDot (intern (cn (str PackageName) "."))
+             ExpPackageName (explode PackageName)
+             Packaged (packageh PackageNameDot ListofExceptions Code ExpPackageName) 
+             Internal (record-internal PackageName (internal-symbols ExpPackageName Packaged))
+             (append Packaged Stream))
     X Stream -> [X | Stream])  
 
 (define record-exceptions 
   ListofExceptions PackageName 
    -> (let CurrExceptions (trap-error (get PackageName external-symbols) (/. E []))
            AllExceptions (union ListofExceptions CurrExceptions)
-           (put PackageName external-symbols AllExceptions)))   
+           (put PackageName external-symbols AllExceptions))) 
+
+(define record-internal
+  PackageName Internal -> (put PackageName internal-symbols (union Internal (trap-error (get PackageName internal-symbols) (/. E [])))))
+
+(define internal-symbols
+  ExpPackageName PackageSymbol -> [PackageSymbol]  where (and (symbol? PackageSymbol) (prefix? ExpPackageName (explode PackageSymbol)))
+  ExpPackageName [X | Y] -> (union (internal-symbols ExpPackageName X) (internal-symbols ExpPackageName Y))
+  _ _ -> [])
        
 (define packageh
-    PackageName Exceptions [X | Y] 
-      -> [(packageh PackageName Exceptions X) | (packageh PackageName Exceptions Y)]
-    PackageName Exceptions X -> X  
-                 where (or (sysfunc? X) (variable? X) (element? X Exceptions)
-                           (doubleunderline? X) (singleunderline? X))
-    PackageName Exceptions X -> (concat PackageName X)   
-             where (and (symbol? X) (not (prefix? ["s" "h" "e" "n" "-"] (explode X))))
-    _ _ X -> X) 
+    PackageNameDot Exceptions [X | Y] ExpPackageName
+      -> [(packageh PackageNameDot Exceptions X ExpPackageName) | (packageh PackageNameDot Exceptions Y ExpPackageName)]
+    PackageNameDot Exceptions X ExpPackageName -> X  
+                 where (or (sysfunc? X) 
+                           (variable? X) 
+                           (element? X Exceptions)
+                           (doubleunderline? X) 
+                           (singleunderline? X))                           
+    PackageNameDot Exceptions X ExpPackageName -> (concat PackageNameDot X)                                                          
+             where (and (symbol? X) 
+                        (let ExplodeX (explode X)
+                             (and (not (prefix? [($ shen.)] ExplodeX))
+                                  (not (prefix? ExpPackageName ExplodeX)))))
+    _ _ X _ -> X) 
 
-(define read-from-string
-  S -> (let Ns (map (function string->n) (explode S))
-            (compile (function shen-<st_input>) 
-                     Ns 
-                     (function shen-read-error))))
+        )
+

@@ -91,19 +91,19 @@
 (define l_interpreter
   {A --> B}
   _ -> (read_eval_print_loop (output "~%L interpreter ~%~%~%~%l-interp --> ~A~%" 
-                                     (normal_form (input+ : l_formula)))))
+                                     (normal_form (input+ l_formula)))))
 
 (define read_eval_print_loop
   {string --> A}
   _ -> (read_eval_print_loop 
            (output "l-interp --> ~A~%"
-              (normal_form (input+ : l_formula))))) 
+              (normal_form (input+ l_formula))))) 
 
 (define normal_form
   {l_formula --> l_formula}
-   X -> (fix ==> X))                 
+   X -> (fix (function ==>>) X))                 
     
-(define ==>
+(define ==>>
    {l_formula --> l_formula}
    [= X Y] -> (let X* (normal_form X) 
                    (let Y* (normal_form Y) 
@@ -163,10 +163,8 @@
   X -> (- X 1) where (number? X)
   _ -> "error!")
 
-\* (spy +) *\
-
 (define sub
-  {[(pattern * l_formula)] --> l_formula --> l_formula}
+  {(list (pattern * l_formula)) --> l_formula --> l_formula}
    [] X -> X
    [(@p Var Val) | Assoc] X -> (sub Assoc (replace Var Val X)))
 
@@ -192,7 +190,7 @@
     _ _ -> [(@p no matching)])
       
 (define no_match?
-  {[(pattern * l_formula)] --> boolean}
+  {(list (pattern * l_formula)) --> boolean}
    [(@p no matching)] -> true
    _ -> false)
 
