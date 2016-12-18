@@ -15,3 +15,6 @@ stale
 repl-port
 shen.clj-*
 .\#*
+.nrepl*
+\#*\#
+*.swp
