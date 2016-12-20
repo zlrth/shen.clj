@@ -167,7 +167,7 @@
  (report "yacc"
    (load "yacc.shen") loaded
    (compile (function <sent>) [the cat likes the dog]) [the cat likes the dog]
-   (compile (function <sent>) [the cat likes the canary] (/. E (fail))) (fail)
+   (compile (function <sent>) [the cat likes the canary] (/. E (fail))) (fail) \* replace lambda with clojure idiom? *\
    (compile (function <asbscs>) [a a a b b c])  [a a a b b c]
    (compile (function <find-digit>) [a v f g 6 y u]) [6]
    (compile (function <vp>) [chases the cat]) [chases the cat]

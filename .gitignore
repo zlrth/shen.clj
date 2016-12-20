@@ -18,3 +18,4 @@ shen.clj-*
 .nrepl*
 \#*\#
 *.swp
+reference-sbcl
