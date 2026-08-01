@@ -1,45 +1,67 @@
 ;; src/shen/overwrite.clj
-(ns shen
-  (:use [shen.primitives])
-  (:require [clojure.core :as c])
-  (:refer-clojure :only []))
+;;
+;; Loaded by the generated kernel as its last form. `in-ns` rather than `ns`:
+;; the namespace already has every mapping it needs from the generated header,
+;; and re-running `(:use [shen.primitives])` here would try to refer primitives
+;; over kernel definitions that deliberately replaced them -- `pr`, which Shen
+;; 41 defines in writer.kl, being the one that matters.
+(in-ns 'shen)
 
-(set '*language* "Clojure")
-(set '*implementation* (c/str "Clojure " (c/clojure-version)
-                              " [jvm "(System/getProperty "java.version")"]"))
-(set '*porters* "Håkan Råberg")
-
+;; Streams and the home directory have to be in place before initialisation:
+;; shen.initialise-environment defaults *sterror* from *stoutput* and only sets
+;; *home-directory* if it isn't already bound.
 (set '*stinput* c/*in*)
 (set '*stoutput* c/*out*)
+(set '*sterror* c/*err*)
 
 (set '*home-directory* (System/getProperty "user.dir"))
 
-(shen-initialise_environment)
+;; Since Shen 22.0 the kernel's top-level forms are all grouped here, and
+;; nothing else in the kernel works until this has run. It must come after
+;; every defun, which is why overwrite.clj is loaded last.
+(shen-dot-initialise)
 
-(defun (intern "@p") (V706 V707)
-  (c/object-array ['shen-tuple V706 V707]))
+;; The banner reads these back as
+;;   version: S<version>, language: <language>, platform: <implementation> <release>
+;;   port <port>, ported by <porters>
+;; with *version* and *port* set by the kernel and the generated header.
+(set '*language* "Clojure")
+(set '*implementation* "Clojure")
+(set '*release* (c/str (c/clojure-version)
+                       " [jvm " (System/getProperty "java.version") "]"))
+(set '*os* (System/getProperty "os.name"))
+(set '*porters* "Håkan Råberg")
 
-(defun variable? (V702)
-  (and (c/symbol? V702) (Character/isUpperCase (.charAt (c/name V702) 0))))
-
-(defun boolean? (V746)
-  (c/cond (= true V746) true
-          (= false V746) true
-          (= (intern "true") V746) true
-          (= (intern "false") V746) true
+;; Truth has two spellings in this port. Literal `true`/`false` in the KLambda
+;; kernel become Clojure booleans, because that is what Clojure's reader makes
+;; of those tokens and what `if` needs. But `true` read out of Shen source at
+;; runtime arrives from `intern` as the symbol `true`, and the kernel's own
+;; recogniser -- (cond ((= true V) true) ((= false V) true) (true false)) --
+;; only knows the first spelling.
+;;
+;; Evaluation copes on its own: the KLambda translator maps the symbols back to
+;; booleans. The type checker does not, because it reasons over the Shen datum
+;; before it is compiled, so `(define foo {number --> boolean} _ -> true)` fails
+;; to typecheck. Widening boolean? fixes that, and with it symbol?, which
+;; consults boolean? first and would otherwise call `true` a symbol.
+(defun boolean? (V3885)
+  (c/cond (= true V3885) true
+          (= false V3885) true
+          (= (intern "true") V3885) true
+          (= (intern "false") V3885) true
           :else false))
 
-(defun shen-compose (V532 V533)
-  (c/reduce #(%2 %) V533 V532))
-
-(defun element? (V787 ^java.util.Collection V788)
-  (.contains V788 V787))
-
-(defun macroexpand (V510)
-  (let Y (shen-compose (c/drop-while c/nil?
-                                     (c/map #(c/when-let [m (c/ns-resolve 'shen %)] @m)
-                                            (value '*macros*))) V510)
-       (if (= V510 Y) V510 (shen-walk macroexpand Y))))
+;; Shen 41 compiles an application whose head has no registered arity into a
+;; lambda-form lookup, and no Clojure name has a registered arity -- so
+;; `(神 (c/count "abc"))` dies in the kernel's `fn` before it ever reaches
+;; Clojure. Falling back for namespace-qualified symbols restores that; bare
+;; symbols keep the kernel's own error, since those are names Shen itself could
+;; have defined.
+(defun fn (V3229)
+  (c/cond
+    (= 0 (arity V3229)) ((shen.primitives/function V3229))
+    :else (trap-error (get V3229 (intern "shen.lambda-form") (value '*property-vector*))
+                      (λ E (shen.primitives/clj-function V3229)))))
 
 ;; Based on [Shen Mode](https://github.com/eschulte/shen-mode) by Eric Schulte.
 ;; - Shen functions taken largely from the Qi documentation by Dr. Mark Tarver.

@@ -1,166 +1,256 @@
-(define yacc 
-  [defcc S | CC_Stuff] -> (yacc->shen S CC_Stuff (extract-segvars CC_Stuff)))
+\\           Copyright (c) 2010-2019, Mark Tarver
 
-(define extract-segvars
-  X -> [X]   where (segvar? X)
-  [X | Y] -> (union (extract-segvars X) (extract-segvars Y))
-  _ -> [])
-   
+\\                  All rights reserved.
+
+(package shen []
+
+(define compile
+  F L -> (let Compile (F L)
+           (cases (parse-failure? Compile)         (error "parse failure~%")
+                  (partial-parse-failure? Compile) (do (set *residue* (in-> Compile))
+                                                       (raise-syntax-error (value *residue*)))
+                  true                             (<-out Compile))))
+
+(define raise-syntax-error
+  Residue -> (error (cn "syntax error here: "
+                     (syntax-error-message (value *maximum-print-sequence-size*) 0 Residue))))
+
+(define syntax-error-message
+  _ _ [] -> "c#10;"
+  Max Max _ -> "...etc c#10;"
+  Max N [X | Y] -> (cn (make-string "~S " X) (syntax-error-message Max (+ N 1) Y)))
+
+(define parse-failure?
+  X -> (= X (fail)))
+
+(define partial-parse-failure?
+  Compile -> (cons? (in-> Compile)))
+
+(define objectcode
+   [_ ObjectCode] -> ObjectCode
+   X -> (error "~S is not a YACC stream~%" X))
+
 (define yacc->shen
-  S CC_Stuff SegVars -> (let Main [define S | (yacc_cases (map (function cc_body) (split_cc_rules CC_Stuff [])))]
-                             (if (empty? SegVars)
-                                 Main
-                                 [package null [] Main | (map (function segdef) SegVars)])))
+   YACC -> (compile (/. X (<yacc> X)) YACC))
 
-(define segdef
-  S -> [define S
-        [@p In Out] Continuation -> [let Continue [Continuation [reverse Out] [@p In []]]
-                                         [if [and [= Continue [fail]] [cons? In]]
-                                             [S [@p [tl In] [cons [hd In] Out]] Continuation]
-                                     Continue]]]) 
+(defcc <yacc>
+   F <yaccsig> <c-rules> := (let Input (gensym (protect S))
+                                 Def    (append [define F]
+                                                <yaccsig>
+                                                [Input -> (c-rules->shen <yaccsig> Input <c-rules>)])
+                                 Def);)
 
-(define yacc_cases
-  Cases -> (append (mapcan (/. Case [Stream <- Case]) Cases) [_ -> [fail]]))
- 
-(define first_n
-  0 _ -> []
-  _ [] -> []
-  N [X | Y] -> [X | (first_n (- N 1) Y)])
+(defcc <yaccsig>
+  LC [list A] ==> B RC := [{ [list A] --> [str [list A] B] }]
+                            where (and (= { LC) (= } RC));
+  <e> := [];)
 
-(define split_cc_rules
-  [] [] -> []
-  [] RevRule -> [(split_cc_rule (reverse RevRule) [])]
-  [; | CC_Stuff] RevRule 
-   -> [(split_cc_rule (reverse RevRule) []) | (split_cc_rules CC_Stuff [])]
-  [X | CC_Stuff] RevRule -> (split_cc_rules CC_Stuff [X | RevRule]))
+(defcc <c-rules>
+   <c-rule> <c-rules> := [<c-rule> | <c-rules>];
+   <!> := (if (empty? <!>) [] (error "YACC syntax error here:~% ~R~% ..." <!>));)
 
-(define split_cc_rule 
-   [:= Semantics] RevSyntax -> [(reverse RevSyntax) Semantics]
-   [:= | Semantics] RevSyntax -> [(reverse RevSyntax) (cons_form Semantics)]
-   [] RevSyntax 
-   -> (do (output "warning: ")
-          (map (/. X (output "~A " X)) (reverse RevSyntax))
-          (output "has no semantics.~%")
-          (split_cc_rule [:= (default_semantics (reverse RevSyntax))] RevSyntax))
-   [Syntax | Rule] RevSyntax -> (split_cc_rule Rule [Syntax | RevSyntax]))
+(defcc <c-rule>
+   <syntax> <semantics> <sc>  := [<syntax> <semantics>];
+   <syntax> <sc>              := [<syntax> (autocomplete <syntax>)];)
 
-(define default_semantics 
-  [] -> []
-  [S | Syntax] -> (let PS [snd (concat Parse_ S)]
-                   (if (empty? Syntax) 
-                       PS 
-                       [append PS 
-                              (default_semantics Syntax)]))	
-                                   where (grammar_symbol? S)
-  [S | Syntax] -> [cons S (default_semantics Syntax)])
+(define autocomplete
+  [SyntaxItem] -> SyntaxItem    where (non-terminal? SyntaxItem)
+  [SyntaxItem | Syntax] -> [append SyntaxItem (autocomplete Syntax)]  where (non-terminal? SyntaxItem)
+  [SyntaxItem | Syntax] -> [cons (autocomplete SyntaxItem) (autocomplete Syntax)]
+  SyntaxItem -> SyntaxItem)
 
-(define cc_body 
-  [Syntax Semantics] -> (syntax Syntax Stream Semantics))
+(define non-terminal?
+  SyntaxItem -> (and (symbol? SyntaxItem)
+                     (let Explode (explode SyntaxItem)
+                         (compile (/. X (<non-terminal?> X)) Explode))))
 
-(define syntax 
-  [] Stream Semantics -> [reassemble [fst Stream] (semantics Semantics)]
-  [S | Syntax] Stream Semantics 
-    -> (if (grammar_symbol? S) 
-           (recursive_descent [S | Syntax] Stream Semantics)
-           (if (segvar? S)
-               (segment-match [S | Syntax] Stream Semantics)
-               (if (terminal? S)       
-               (check_stream [S | Syntax] Stream Semantics)
-               (if (jump_stream? S)    
-                   (jump_stream [S | Syntax] Stream Semantics)
-                   (if (list_stream? S)    
-                       (list_stream (decons S) Syntax Stream Semantics)
-	               (error "~A is not legal syntax~%" S)))))))
-	       
+(defcc <non-terminal?>
+  <packagenames> <non-terminal-name> := true;
+  <non-terminal-name> := true;
+  <!> := false;)
 
-(define list_stream?
-  [_ | _] -> true
+(defcc <packagenames>
+  <packagename> "." <packagenames>  := skip;
+  <packagename> "." := skip;)
+
+(defcc <packagename>
+  <packagechar> <packagename> := skip;
+  <e> := skip;)
+
+(defcc <packagechar>
+   X := skip           where (not (= X "."));)
+
+(defcc <non-terminal-name>
+  "<" <!> := skip  where (let Reverse (reverse <!>)
+                              (and (cons? Reverse) (= (hd Reverse) ">")));)
+
+(define semicolon?
+  X -> (= X (intern ";")))
+
+(defcc <colon-equal>
+  X := skip  where (colon-equal? X);)
+
+(define colon-equal?
+  X -> (= (intern ":=") X))
+
+(defcc <syntax>
+   <syntax-item> <syntax> := [<syntax-item> | <syntax>];
+   <syntax-item> := [<syntax-item>];)
+
+(defcc <syntax-item>
+   X := X    where (syntax-item? X);)
+
+(define syntax-item?
+   X           -> false  where (colon-equal? X)
+   X           -> false  where (semicolon? X)
+   X           -> true	  where (atom? X)
+   [cons X Y]  -> (and (syntax-item? X) (syntax-item? Y))
+   _           -> false)
+
+(defcc <semantics>
+  <colon-equal> Semantics where Guard := [where Guard Semantics] where (not (semicolon? Semantics));
+  <colon-equal> Semantics             := Semantics               where (not (semicolon? Semantics));)
+
+(define c-rules->shen
+  _ Input [] -> [parse-failure]
+  Type Input [CRule | CRules]
+   -> (combine-c-code (c-rule->shen Type CRule Input)
+                      (c-rules->shen Type Input CRules))
+  _ _ _ -> (error "implementation error in shen.c-rules->shen~%"))
+
+(define parse-failure
+  -> (fail))
+
+(define combine-c-code
+  CRuleShen CRulesShen -> [let (protect Result) CRuleShen
+                               [if [parse-failure? (protect Result)]
+                                   CRulesShen
+                                   (protect Result)]])
+
+(define c-rule->shen
+  Type [Syntax Semantics] Input -> (yacc-syntax Type Input Syntax Semantics)
+   _ _ _ -> (error "implementation error in shen.c-rule->shen~%"))
+
+(define yacc-syntax
+  Type Input [] [where P Semantics] -> [if (process-yacc-semantics P)
+                                           (yacc-syntax Type Input [] Semantics)
+                                           [parse-failure]]
+  Type Input [] Semantics -> (yacc-semantics Type Input Semantics)
+  Type Input [SyntaxItem | Syntax] Semantics
+   -> (cases (non-terminal? SyntaxItem) (non-terminalcode Type Input SyntaxItem Syntax Semantics)
+             (variable? SyntaxItem)     (variablecode Type Input SyntaxItem Syntax Semantics)
+             (= _ SyntaxItem)           (wildcardcode Type Input SyntaxItem Syntax Semantics)
+             (atom? SyntaxItem)         (terminalcode Type Input SyntaxItem Syntax Semantics)
+             (cons? SyntaxItem)         (conscode Type Input SyntaxItem Syntax Semantics)
+             true                       (error "implementation error in shen.yacc-syntax~%"))
+  _ _ _ _ -> (error "implementation error in shen.yacc-syntax~%"))
+
+(define non-terminalcode
+  Type Input NonTerminal Syntax Semantics
+    -> (let TryParse         (concat (protect Parse) NonTerminal)
+            Act              (concat (protect Action) NonTerminal)
+            Remainder        (concat (protect Remainder) NonTerminal)
+        [let TryParse [NonTerminal Input]
+          [if [parse-failure? TryParse]
+              [parse-failure]
+              (let Continue [let Remainder [in-> TryParse]
+                                 (yacc-syntax Type Remainder Syntax Semantics)]
+                   (if (or (occurs-check? NonTerminal Semantics) (occurs-check? Act Semantics))
+                       [let Act [<-out TryParse] Continue]
+                       Continue))]]))
+
+
+(define variablecode
+  Type Input Variable Syntax Semantics
+    -> (let Remainder (gensym (protect Remainder))
+         [if [cons? Input]
+             (let Continue [let Remainder [tail Input]
+                             (yacc-syntax Type Remainder Syntax Semantics)]
+                  (if (occurs-check? Variable Semantics)
+                      [let Variable [head Input] Continue]
+                      Continue))
+             [parse-failure]]))
+
+(define wildcardcode
+  Type Input Variable Syntax Semantics
+    -> (let Remainder (gensym (protect Remainder))
+         [if [cons? Input]
+             [let Remainder [tail Input]
+               (yacc-syntax Type Remainder Syntax Semantics)]
+             [parse-failure]]))
+
+(define terminalcode
+  Type Input Terminal Syntax Semantics
+    -> (let Remainder (gensym (protect Remainder))
+         [if [hds=? Input Terminal]
+             [let Remainder [tail Input]
+               (yacc-syntax Type Remainder Syntax Semantics)]
+             [parse-failure]]))
+
+(define hds=?
+  [X | _] X -> true
+  _ _ -> false)
+
+(define conscode
+  Type Input Cons Syntax Semantics
+    -> (let Remainder (gensym (protect Remainder))
+            Head      (gensym (protect Hd))
+            Tail      (gensym (protect Tl))
+        [if [ccons? Input]
+            [let Head [head Input]
+                 Tail [tail Input]
+              (yacc-syntax Type Head (append (decons Cons) [<end>])
+                  [processed (yacc-syntax Type Tail Syntax Semantics)])]
+            [parse-failure]]))
+
+(define ccons?
+  [[_ | _] | _] -> true
   _ -> false)
 
 (define decons
   [cons X Y] -> [X | (decons Y)]
   X -> X)
 
-(define list_stream
-  S Syntax Stream Semantics 
-   -> (let Test [and [cons? [fst Stream]] [cons? [hd [fst Stream]]]]
-           Action [snd-or-fail (syntax S 
-                          [reassemble [hd [fst Stream]] [snd Stream]]
-                          [leave! (syntax Syntax 
-                              [reassemble [tl [fst Stream]]
-                                          [snd Stream]]
-                              Semantics)])] 
-          Else [fail]
-          [if Test Action Else])) 
-          
-(define snd-or-fail
-  (@p _ Y) -> Y
-  _ -> (fail))          
-   
-(define grammar_symbol?
-  S -> (and (symbol? S) 
-            (let Cs (explode S) 
-                (and (= (hd Cs) "<") (= (hd (reverse Cs)) ">")))))				
-  
-(define recursive_descent 
-  [S | Syntax] Stream Semantics -> (let Test [S Stream]
-                                        Action (syntax Syntax 
-                                                       (concat Parse_ S) Semantics)
-                                        Else [fail]
-                                        [let (concat Parse_ S) Test
-                                             [if [not [= [fail] (concat Parse_ S)]]
-                                                 Action
-                                                 Else]])) 
-(define segvar?
-  S -> (and (symbol? S) (= (hd (explode S)) "?")))
+(define comb
+  X Y -> [X Y])
 
-(define segment-match
-  [S | Syntax] Stream Semantics 
-   -> (let Continuation [lambda S [lambda Restart (syntax Syntax Restart Semantics)]]
-           [S Stream Continuation]))
+(define yacc-semantics
+  _ _ [processed Semantics] -> Semantics
+  Type Input Semantics -> (let Process (process-yacc-semantics Semantics)
+                               Annotate (use-type-info Type Process)
+                            [comb Input Annotate]))
 
-         
-(define terminal? 
-  [_ | _] -> false
-  -*- -> false
+(define use-type-info
+  [{ [list A] --> [str [list A] B] }] Semantics -> [type Semantics B]
+      where (monomorphic? B)
+  _ Semantics -> Semantics)
+
+(define monomorphic?
+  X -> false  where (variable? X)
+  [X | Y] -> (and (monomorphic? X) (monomorphic? Y))
   _ -> true)
 
-(define jump_stream?
-   -*- -> true
-   _ -> false)
-  
-(define check_stream 
-  [S | Syntax] Stream Semantics 
-  -> (let Test [and [cons? [fst Stream]] [= S [hd [fst Stream]]]]
-          Action (syntax Syntax [reassemble [tl [fst Stream]] 
-                                            [snd Stream]] Semantics)
-          Else [fail]
-          [if Test Action Else])) 
+(define process-yacc-semantics
+  [protect NonTerminal] -> NonTerminal    where (non-terminal? NonTerminal)
+  [X | Y] -> (map (/. Z (process-yacc-semantics Z)) [X | Y])
+  NonTerminal -> (concat (protect Action) NonTerminal)  where (non-terminal? NonTerminal)
+  X -> X)
 
-(define reassemble
-  _ X -> X  where (= X (fail))
-  I O -> (@p I O))
+(define <-out
+  [_ X] -> X
+  X -> (hd (tl X)))
 
-(define jump_stream 
-  [S | Syntax] Stream Semantics 
-  -> (let Test [cons? [fst Stream]]
-          Action (syntax Syntax [reassemble [tl [fst Stream]] 
-                                            [snd Stream]] Semantics)
-          Else [fail]
-          [if Test Action Else]))
-  
-(define semantics 
-  [leave! S] -> S
-  [] -> []
-  S -> [snd (concat Parse_ S)] 	where (grammar_symbol? S) 
-   -o- -> [snd Stream] 
-  -*- -> [hd [fst Stream]]     
-  -s- -> [fst Stream]     
-  [X | Y] -> (map (function semantics) [X | Y])
-  X -> X)       
-
-(define fail
-  -> fail!) 
+(define in->
+  X -> (hd X))
 
 (define <!>
-  (@p X _) -> (@p [] X)) 
+  X -> [[] X])
+
+(define <e>
+  X -> [X []])
+
+(define <end>
+  [] -> [[] []]
+  _ -> (parse-failure))
+
+)

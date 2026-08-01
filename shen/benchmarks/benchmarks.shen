@@ -1,56 +1,54 @@
-(benchmark "read a 10K binary file" (read-file-as-bytelist "plato.jpg"))
+\\ Copyright (c) 2019 Bruno Deferrari.
+\\ BSD 3-Clause License: http://opensource.org/licenses/BSD-3-Clause
 
-(benchmark "read a 105K binary file" (read-file-as-bytelist "heatwave.gif"))
+(define power
+  N 1 -> N
+  N Power -> (* N (power N (- Power 1))))
 
-(benchmark "parse a 7K Shen file" (read-file "interpreter.shen"))
+(set *benchmarks* [])
 
-(benchmark "compile a 130 LOC Qi program" (load "short.shen"))
+(define add-benchmark
+  Tag Description F RunsPower -> (do (set *benchmarks* [[Tag Description F RunsPower] | (value *benchmarks*)])
+                                     done))
 
-(benchmark "compile a 27 line Prolog program" (load "einstein.shen"))
+(define run-benchmark
+  Report [Tag Description F RunsPower]
+  -> (let X (Report begin [Tag Description RunsPower])
+          Runs (power 10 RunsPower)
+          Start (get-time run)
+          Result (F Runs)
+          End (get-time run)
+          X (Report finish [Tag Description RunsPower Start End])
+       done))
 
-(benchmark "solve Einstein's puzzle" (prolog? (einsteins_riddle X) (return X)))
+(define stoutput-report
+  setup _ -> skip
+  cleanup _ -> skip
+  begin [_ Description RunsPower] -> (output "Measuring 10^~S runs of: ~A~%" RunsPower Description)
+  finish [_ _ _ Start End] -> (output "    run time: ~S secs~%" (- End Start)))
 
-(load "powerset.shen")
+(define save-report
+  setup _ -> (set *benchmark-results* [])
+  cleanup _ -> skip
+  begin _ -> skip
+  finish Data -> (set *benchmark-results* [Data | (value *benchmark-results*)]))
 
-(benchmark "powerset of 14 numbers" (powerset [1 2 3 4 5 6 7 8 9 10 11 12 13 14]))
+(define run-all-benchmarks
+  Report -> (let Benchmarks (reverse (value *benchmarks*))
+                 Setup (Report setup Benchmarks)
+                 Results (map (run-benchmark Report) Benchmarks)
+                 Cleanup (Report cleanup Benchmarks)
+              done))
 
-(do (set *str* (hd (read-file "text.txt"))) ok)
+(set *hush* true)
+(trap-error (factorise +) (/. E cannot-factorise))
+(load "benchmarks/data.shen")
+(load "benchmarks/control-flow.shen")
+(load "benchmarks/shen-compilation.shen")
+(load "benchmarks/pattern-matching.shen")
+(load "benchmarks/equality-check.shen")
+(set *hush* false)
 
-(define remstr
-  "" -> 0
-  (@s "er" S) -> (+ 1 (remstr S))
-  (@s _ Ss) -> (remstr Ss))
-
-(benchmark "count 'er' in a string" (remstr (value *str*)))
-
-(define vectorn
-  0 -> <>
-  N -> (@v N (vectorn (- N 1))))
-  
-(define vectorp
-  <> -> <>
-  (@v X Y) -> (@v (+ X 1) (vectorp Y))
-  (@v X Y Z) -> (@v (+ X 1) (+ Y 2) (vectorp Z)))
-    
-(benchmark "vector of 1000 elements" (vectorn 1000))
-
-(define tak
-  X Y Z -> Z   where (not (< Y X))
-  X Y Z -> (tak (tak (- X 1) Y Z)
-                (tak (- Y 1) Z X)
-                (tak (- Z 1) X Y)))
-
-(benchmark "(tak 18 12 6)" (tak 18 12 6))
-
-(benchmark "compile 10 line YACC program for paren checking" (load "br.shen")) 
-
-(benchmark "paren check a 2000 line program" (compile <br> (read-file-as-bytelist "bigprog")))
-
-(tc +)
-
-(benchmark "type checking the N queens" (load "N queens.shen"))
-
-(benchmark "solving the N queens for N = 6" (n-queens 6))
-
-(benchmark "load and typecheck Qi interpreter" (load "interpreter.shen"))
-  
+(if (bound? *argv*)
+    (run-all-benchmarks (function stoutput-report))
+    skip)

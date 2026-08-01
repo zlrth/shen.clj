@@ -1,212 +1,256 @@
-(define datatype-error 
-  D -> (error "datatype syntax error here:~%~% ~A~%" (next-50 50 D)))
+\\           Copyright (c) 2010-2019, Mark Tarver
+
+\\                  All rights reserved.
+
+(package shen [ctxt]
+
+(defcc <datatype>
+  D <datatype-rules> := (let Prolog (rules->prolog D <datatype-rules>)
+                             (remember-datatype D (fn D)));)
+
+(define remember-datatype
+  D Fn -> (do (set *datatypes* (assoc-> D Fn (value *datatypes*)))
+              (set *alldatatypes* (assoc-> D Fn (value *alldatatypes*)))
+              D))
 
 (defcc <datatype-rules>
-  <datatype-rule> <datatype-rules> := [<datatype-rule> | <datatype-rules>];
-  <e> := [];)
+  <datatype-rule> <datatype-rules> := (append <datatype-rule> <datatype-rules>);
+  <!> := (if (empty? <!>) [] (error "datatype syntax error here:~% ~R~% ..." <!>));)
 
 (defcc <datatype-rule>
-  <side-conditions> <premises> <singleunderline> <conclusion>
-  := (@p single [<side-conditions> <premises> <conclusion>]);
-  <side-conditions> <premises> <doubleunderline> <conclusion>
-  := (@p double [<side-conditions> <premises> <conclusion>]);)
+  <single>;
+  <double>;)
 
-(defcc <side-conditions>
-  <side-condition> <side-conditions> := [<side-condition> | <side-conditions>];
-  <e> := [];)
+(defcc <single>
+  <sides> <prems> <sng> <conc> <sc> := [[<sides> <prems> <conc>]];)
 
-(defcc <side-condition>
-  if <expr> := [if <expr>];
-  let <variable?> <expr> := [let <variable?> <expr>];)
-
-(defcc <variable?>
-  -*- := (if (not (variable? -*-))
-             (fail)
-             -*-);)
-
-(defcc <expr>
-  -*- := (if (or (element? -*- [>> ;]) 
-                 (or (singleunderline? -*-) (doubleunderline? -*-)))
-             (fail)
-              (remove-bar -*-));)
-
-(define remove-bar
-  [X B Y] -> [X | Y] where (= B bar!)
-  [X | Y] -> [(remove-bar X) | (remove-bar Y)]
-  X -> X)
-
-(defcc <premises>
-  <premise> <semicolon-symbol> <premises> := [<premise> | <premises>];
-  <e> := [];)
-
-(defcc <semicolon-symbol>
-  -*- := (if (= -*- ;) skip (fail));)
-
-(defcc <premise>
-  ! := !; 
-  <formulae> >> <formula> := (@p <formulae> <formula>);
-  <formula> := (@p [] <formula>);)
-
-(defcc <conclusion>
-  <formulae> >> <formula> <semicolon-symbol> := (@p <formulae> <formula>);
-  <formula> <semicolon-symbol> := (@p [] <formula>);)
+(defcc <double>
+  <sides> <formulae> <dbl> <formula> <sc> := (lr-rule <sides> <formulae> [[] <formula>]);)
 
 (defcc <formulae>
-   <formula> , <formulae> := [<formula> | <formulae>];
-   <formula> := [<formula>];
+  <formula> <sc> <formulae> := [[[] <formula>] | <formulae>];
+  <formula> <sc>            := [[[] <formula>]];)
+
+(defcc <conc>
+  <ass> >> <formula> := [<ass> <formula>];
+  <formula>          := [[] <formula>];)
+
+(defcc <prems>
+  <prem> <sc> <prems> := [<prem> | <prems>];
+  <e> := [];)
+
+(defcc <prem>
+  !                   := !;
+  <ass> >> <formula>  := [<ass> <formula>];
+  <formula>           := [[] <formula>];)
+
+(defcc <ass>
+   <formula> <iscomma> <ass> := [<formula> | <ass>];
+   <formula>         := [<formula>];
    <e> := [];)
 
-(defcc <formula>
-   <expr> : <type> := [(curry <expr>) : (normalise-type <type>)];
-   <expr> := <expr>;)
+(defcc <iscomma>
+  X := skip  where (= X (intern ","));)
 
-(defcc <colonsymbol>
-  -*- := (if (= -*- ;) -*- (fail));)
+(defcc <formula>
+   <expr> <iscolon> <type> := [(curry <expr>) (intern ":") (rectify-type <type>)];
+   <expr>          := <expr>;)
+
+(defcc <iscolon>
+  X := skip   where (= X (intern ":"));)
+
+(defcc <sides>
+  <side> <sides> := [<side> | <sides>];
+  <e> := [];)
+
+(defcc <side>
+  if P    := [if P];
+  let X Y := [let X Y];
+  ctxt X  := [ctxt X] where (variable? X);)
+
+(define lr-rule
+  Side Sequents [[] C] -> (let P (gensym (protect P))
+                               LConc [[C] P]
+                               LPrem [(coll-formulae Sequents) P]
+                               Left [Side [LPrem] LConc]
+                               Right [Side Sequents [[] C]]
+                               [Right Left])
+  _ _ _ -> (simple-error "implementation error in shen.lr-rule"))
+
+(define coll-formulae
+  [] -> []
+  [[[] Q] | Sequents] -> [Q | (coll-formulae Sequents)]
+  _ -> (simple-error "implementation error in shen.coll-formulae"))
+
+(defcc <expr>
+  X := (macroexpand X) where (not (key-in-sequent-calculus? X));)
+
+(define key-in-sequent-calculus?
+  X -> (or (element? X [>> (intern ";") (intern ",") (intern ":") <--]) (sng? X) (dbl? X)))
 
 (defcc <type>
-   <expr> := (curry-type <expr>);)
+   <expr> := <expr>;)
 
-(defcc <doubleunderline>
-  -*- := (if (doubleunderline? -*-)
-             -*-
-             (fail));)
+(defcc <dbl>
+  X := X	where (dbl? X);)
 
-(defcc <singleunderline> 
-  -*- := (if (singleunderline? -*-)
-             -*-
-             (fail));)
+(defcc <sng>
+  X := X	where (sng? X);)
 
-(define singleunderline?
-  S -> (and (symbol? S) (sh? (str S))))
+(define sng?
+  S -> (and (symbol? S) (sng-h? (str S))))
 
-(define sh?
-  "_" -> true
-  S -> (and (= (pos S 0) "_") (sh? (tlstr S))))
-            
-(define doubleunderline?
-  S -> (and (symbol? S) (dh? (str S))))
+(define sng-h?
+  "___" -> true
+  (@s "_" S) -> (sng-h? S)
+  _ -> false)
 
-(define dh?
-  "=" -> true
-  S -> (and (= (pos S 0) "=") (dh? (tlstr S))))
+(define dbl?
+  S -> (and (symbol? S) (dbl-h? (str S))))
 
-(define process-datatype 
-  D Rules -> (remember-datatype (s-prolog (rules->horn-clauses D Rules))))
+(define dbl-h?
+  "===" -> true
+  (@s "=" S) -> (dbl-h? S)
+  _ -> false)
 
-(define remember-datatype 
-  [D | _] -> (do (set *datatypes* (adjoin D (value *datatypes*)))
-                  (set *alldatatypes* (adjoin D (value *alldatatypes*))) 
-                      D))
+(define rules->prolog
+  D Rules -> (let Clauses (mapcan (/. Rule (rule->clause Rule)) Rules)
+                  Prolog  [defprolog D | Clauses]
+                  (eval Prolog)))
 
-(define rules->horn-clauses
-   _ [] -> []
-   D [(@p single Rule) | Rules] 
-    -> [(rule->horn-clause D Rule) | (rules->horn-clauses D Rules)]
-   D [(@p double Rule) | Rules] 
-   -> (rules->horn-clauses D (append (double->singles Rule) Rules)))
+(define rule->clause
+  [S Ps [As Q]] -> (let Active (extract-vars Q)
+                     (append (rule->head Q) [<--] (rule->body Active (protect Assumptions) S Ps As))))
 
-(define double->singles
-  Rule -> [(right-rule Rule) (left-rule Rule)])
+(define rule->head
+  X       -> [(macro-@ch X) (protect Assumptions)])
 
-(define right-rule
-  Rule -> (@p single Rule))
+(define macro-@ch
+  X -> [@ch X])
 
-(define left-rule
-  [S P (@p [] C)] -> (let Q (gensym Qv)
-                          NewConclusion (@p [C] Q)
-                          NewPremises [(@p (map (function right->left) P) Q)]
-                          (@p single [S NewPremises NewConclusion])))
+(define macro-@c
+  X -> [@c X])
 
-(define right->left
-  (@p [] C) -> C
-  _ -> (error "syntax error with ==========~%")) 
+(define rule->body
+  Active Assumptions S Ps []       -> (side-conditions->goals [] Active Assumptions S Ps)
+  Active Assumptions S [] [A]      -> (let Passive (passive-variables A Active)
+                                           NoBystanders (remove-bystanders Active A)
+                                           [(specialise-member A Assumptions NoBystanders Passive)
+                                            | (side-conditions->goals [] Active Assumptions S [])])
+  Active Assumptions S Ps [A | As] -> (let Out     (gensym (protect NewAssumptions))
+                                           Passive (passive-variables A Active)
+                                           NoBystanders (remove-bystanders Active A)
+                                           [(specialise-consume A Assumptions NoBystanders Passive Out)
+                                             | (rule->body (append Active Passive) Out S Ps As)]))
 
-(define rule->horn-clause
-  D [S P (@p A C)] -> [(rule->horn-clause-head D C) :- (rule->horn-clause-body S P A)])
+(define specialise-member
+   A Assumptions NoBystanders Passive -> (let F            (gensym member)
+                                              Clause       (member-clause F A NoBystanders Passive)
+                                              [F Assumptions | (append NoBystanders Passive)]))
 
-(define rule->horn-clause-head
-  D C -> [D (mode-ify C) Context_1957])
+(define remove-bystanders
+  [] _ -> []
+  [V | Vs] A -> [V | (remove-bystanders Vs A)] where (occurs-check? V A)
+  [V | Vs] A -> (remove-bystanders Vs A))
 
-(define mode-ify
-  [X : A] -> [mode [X : [mode A +]] -]  
-  X -> X)
+(define member-clause
+ F A Active Passive -> (let NVars  (nvars (length Passive))
+                            Base   (append [[- [cons (macro-@ch A) _]]] Active NVars [<--] (passive-bind Passive NVars) [(intern ";")])
+                            Ind    (let Hyps (gensym (protect Hypotheses))
+                                        Vars (append Active Passive)
+                                        Head (append [[- [cons _ Hyps]]] Vars)
+                                        Body [[F Hyps | Vars]]
+                                        (append Head [<--] Body [(intern ";")]))
+                            Prolog [defprolog F | (append Base Ind)]
+                            (eval Prolog)))
 
-(define rule->horn-clause-body
-  S P A -> (let Variables (map (function extract_vars) A)
-                Predicates (map (/. X (gensym cl)) A)
-                SearchLiterals (construct-search-literals 
-                                       Predicates Variables Context_1957 Context1_1957)
-                SearchClauses (construct-search-clauses Predicates A Variables)
-                SideLiterals (construct-side-literals S)
-                PremissLiterals (map (/. X (construct-premiss-literal X (empty? A))) P)
-                (append SearchLiterals SideLiterals PremissLiterals)))
+(define nvars
+   0 -> []
+   N -> [(gensym (protect NewV)) | (nvars (- N 1))])
 
-(define construct-search-literals
-  [] [] _ _ -> []
-  Predicates Variables Context Context1 
-  -> (csl-help Predicates Variables Context Context1))
- 
-(define csl-help
-  [] [] In _ -> [[bind ContextOut_1957 In]]
-  [P | Ps] [V | Vs] In Out -> [[P In Out | V] | (csl-help Ps Vs Out (gensym Context))])
+(define passive-bind
+  [] [] -> []
+  [Pass | Passive] [NVar | NVars] -> [[bind NVar Pass] | (passive-bind Passive NVars)])
 
-(define construct-search-clauses
-  [] [] [] -> skip
-  [Pred | Preds] [A | As] [V | Vs] -> (do (construct-search-clause Pred A V)
-                                          (construct-search-clauses Preds As Vs)))
+(define specialise-consume
+   A Assumptions NoBystanders Passive Out
+   -> (let F      (gensym consume)
+           Clause (consume-clause F A NoBystanders Passive Out)
+           [F Assumptions Out | (append NoBystanders Passive)]))
 
-(define construct-search-clause 
-  Pred A V -> (s-prolog [(construct-base-search-clause Pred A V)
-                         (construct-recursive-search-clause Pred A V)]))
+(define consume-clause
+ F A Active Passive Out -> (let NVars  (nvars (length Passive))
+                                V      (gensym (protect Assumption))
+                                Base   [[- [cons (macro-@ch A) V]] Out
+                                          | (append Active NVars  [<--]
+                                                    (passive-bind Passive NVars)
+                                                    [[bind Out V] (intern ";")])]
+                                Ind    (let Hyps (gensym (protect Hypotheses))
+                                            Vars (append Active Passive)
+                                            BV   (gensym (protect Assumptions))
+                                            Head [[- [cons V Hyps]] [cons BV Out] | Vars]
+                                            Body [[bind BV V] [F Hyps Out | Vars]]
+                                            (append Head [<--] Body [(intern ";")]))
+                                Prolog [defprolog F | (append Base Ind)]
+                                (eval Prolog)))
 
-(define construct-base-search-clause
-  Pred A V -> [[Pred [(mode-ify A) | In_1957] In_1957 | V] :- []])
+(define passive-variables
+  A Active -> (difference (extract-vars A) Active))
 
-(define construct-recursive-search-clause
-  Pred A V -> [[Pred [Assumption_1957 | Assumptions_1957] [Assumption_1957 | Out_1957] | V] 
-                 :- [[Pred Assumptions_1957 Out_1957 | V]]])
+(define side-conditions->goals
+  CtxtVs _ Assumptions [] Ps                      -> (premises->goals CtxtVs Assumptions Ps)
+  CtxtVs Active Assumptions [[if Boolean] | S] Ps -> [[when Boolean] | (side-conditions->goals CtxtVs Active Assumptions S Ps)]
+  CtxtVs Active Assumptions [[let X Y] | S]    Ps -> (if (element? X Active)
+                                                         [[is! X Y] | (side-conditions->goals CtxtVs Active Assumptions S Ps)]
+                                                         [[bind X Y] | (side-conditions->goals CtxtVs [X | Active] Assumptions S Ps)])
+  CtxtVs Active Assumptions [[ctxt Ctxt] | S]  Ps -> (if (element? Ctxt Active)
+                                                         (side-conditions->goals [Ctxt | CtxtVs] Active Assumptions S Ps)
+                                                         [[bind Ctxt Assumptions]
+                                                           | (side-conditions->goals [Ctxt | CtxtVs] [Ctxt | Active] Ctxt S Ps)]))
 
-(define construct-side-literals
-  [] -> []
-  [[if P] | Sides] -> [[when P] | (construct-side-literals Sides)]
-  [[let X Y] | Sides] -> [[is X Y] | (construct-side-literals Sides)]
-  [_ | Sides] -> (construct-side-literals Sides))
-
-(define construct-premiss-literal
-  (@p A C) Flag -> [t* (recursive_cons_form C) (construct-context Flag A)]
-  ! _ -> [cut Throwcontrol])
+(define premises->goals
+  _ _ [] -> [(intern ";")]
+  CtxtVs Assumptions [! | Ps]        -> [! | (premises->goals CtxtVs Assumptions Ps)]
+  CtxtVs Assumptions [fail | Ps]     -> [[when false] | (premises->goals CtxtVs Assumptions Ps)]
+  CtxtVs Assumptions [[As C] | Ps]   -> [[system-S (macro-@c C) (construct-context CtxtVs As Assumptions)]
+                                             | (premises->goals CtxtVs Assumptions Ps)])
 
 (define construct-context
-  true [] -> Context_1957
-  false [] -> ContextOut_1957
-  Flag [X | Y] -> [cons (recursive_cons_form X) (construct-context Flag Y)])
-
-(define recursive_cons_form
-  [X | Y] -> [cons (recursive_cons_form X) (recursive_cons_form Y)]
-  X -> X) 
+  _ [] Assumptions            -> Assumptions
+  CtxtVs [Ctxt] _             -> Ctxt where (element? Ctxt CtxtVs)
+  CtxtVs [A | As] Assumptions -> [cons (macro-@c A) (construct-context CtxtVs As Assumptions)])
 
 (define preclude
-   Types -> (let FilterDatatypes (set *datatypes* (difference (value *datatypes*) Types))
-                 (value *datatypes*)))
-             
+   Types -> (let InternTypes (map (/. X (intern-type X)) Types)
+                 Datatypes   (value *datatypes*)
+                 Remove      (remove-datatypes InternTypes Datatypes)
+                 NewDatatypes (set *datatypes* Remove)
+                 (show-datatypes NewDatatypes)))
+
+(define remove-datatypes
+  [] Datatypes       -> Datatypes
+  [D | Ds] Datatypes -> (remove-datatypes Ds (unassoc D Datatypes))
+  _ _ -> (simple-error "implementation error in shen.remove-datatypes"))
+
+(define show-datatypes
+  Datatypes -> (map (/. X (hd X)) Datatypes))
+
 (define include
-   Types -> (let ValidTypes (intersection Types (value *alldatatypes*))
-                 NewDatatypes (set *datatypes* (union ValidTypes (value *datatypes*)))
-                 (value *datatypes*)))
+  Types -> (let InternTypes (map (/. X (intern-type X)) Types)
+                Remember    (map (/. D (remember-datatype D (fn D))) InternTypes)
+                Datatypes   (value *datatypes*)
+                (show-datatypes Datatypes)))
 
 (define preclude-all-but
-  Types -> (preclude (difference (value *alldatatypes*) Types)))
+  Types -> (let Initialise (set *datatypes* [])
+                InternTypes  (map (/. X (intern-type X)) Types)
+                NewDatatypes (map (/. D (remember-datatype D (fn D))) InternTypes)
+                (show-datatypes (value *datatypes*))))
 
 (define include-all-but
-  Types -> (include (difference (value *alldatatypes*) Types)))
+  Types -> (let InternTypes  (map (/. X (intern-type X)) Types)
+                AllDatatypes (value *alldatatypes*)
+                Datatypes (set *datatypes* (remove-datatypes InternTypes AllDatatypes))
+                (show-datatypes Datatypes)))
 
-(define synonyms-help
-  [] -> synonyms
-  [S1 S2 | S] -> (do (pushnew [S1 | S2] *synonyms*)
-                     (synonyms-help S))
-  _ -> (error "odd number of synonyms~%" []))
-  
-(define pushnew
-   X Global -> (if (element? X (value Global))
-                    (value Global)
-                    (set Global [X | (value Global)])))                      
+)

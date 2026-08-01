@@ -1,392 +1,618 @@
-(set *symbolcodes* (vector 128))   
-                  
-(address-> (value *symbolcodes*)  126 "~")
-(address-> (value *symbolcodes*)  122  "z")
-(address-> (value *symbolcodes*)  121  "y")
-(address-> (value *symbolcodes*)  120  "x")
-(address-> (value *symbolcodes*)  119  "w")
-(address-> (value *symbolcodes*)  118  "v")
-(address-> (value *symbolcodes*)  117  "u")
-(address-> (value *symbolcodes*)  116  "t")
-(address-> (value *symbolcodes*)  115  "s")
-(address-> (value *symbolcodes*)  114  "r")
-(address-> (value *symbolcodes*)  113  "q")
-(address-> (value *symbolcodes*)  112  "p")
-(address-> (value *symbolcodes*)  111  "o")
-(address-> (value *symbolcodes*)  110  "n")
-(address-> (value *symbolcodes*)  109  "m")
-(address-> (value *symbolcodes*)  108  "l")
-(address-> (value *symbolcodes*)  107  "k")
-(address-> (value *symbolcodes*)  106  "j")
-(address-> (value *symbolcodes*)  105  "i")
-(address-> (value *symbolcodes*)  104  "h")
-(address-> (value *symbolcodes*)  103  "g")
-(address-> (value *symbolcodes*)  102  "f")
-(address-> (value *symbolcodes*)  101  "e")
-(address-> (value *symbolcodes*)  100  "d")
-(address-> (value *symbolcodes*)  99  "c")
-(address-> (value *symbolcodes*)  98  "b")
-(address-> (value *symbolcodes*)  97  "a")
-(address-> (value *symbolcodes*)  96  "`")
-(address-> (value *symbolcodes*)  95  "_")
-(address-> (value *symbolcodes*)  90  "Z")
-(address-> (value *symbolcodes*)  89  "Y")
-(address-> (value *symbolcodes*)  88  "X")
-(address-> (value *symbolcodes*)  87  "W")
-(address-> (value *symbolcodes*)  86  "V")
-(address-> (value *symbolcodes*)  85  "U")
-(address-> (value *symbolcodes*)  84  "T")
-(address-> (value *symbolcodes*)  83  "S")
-(address-> (value *symbolcodes*)  82  "R")
-(address-> (value *symbolcodes*)  81  "Q")
-(address-> (value *symbolcodes*)  80  "P")
-(address-> (value *symbolcodes*)  79  "O")
-(address-> (value *symbolcodes*)  78  "N")
-(address-> (value *symbolcodes*)  77  "M")
-(address-> (value *symbolcodes*)  76  "L")
-(address-> (value *symbolcodes*)  75  "K")
-(address-> (value *symbolcodes*)  74  "J")
-(address-> (value *symbolcodes*)  73  "I")
-(address-> (value *symbolcodes*)  72  "H")
-(address-> (value *symbolcodes*)  71  "G")
-(address-> (value *symbolcodes*)  70  "F")
-(address-> (value *symbolcodes*)  69  "E")
-(address-> (value *symbolcodes*)  68  "D")
-(address-> (value *symbolcodes*)  67  "C")
-(address-> (value *symbolcodes*)  66  "B")
-(address-> (value *symbolcodes*)  65  "A")
-(address-> (value *symbolcodes*)  64  "@")
-(address-> (value *symbolcodes*)  63  "?")
-(address-> (value *symbolcodes*)  62  ">")
-(address-> (value *symbolcodes*)  61  "=")
-(address-> (value *symbolcodes*)  60  "<")
-(address-> (value *symbolcodes*)  57  "9")
-(address-> (value *symbolcodes*)  56  "8")
-(address-> (value *symbolcodes*)  55  "7")
-(address-> (value *symbolcodes*)  54  "6")
-(address-> (value *symbolcodes*)  53  "5")
-(address-> (value *symbolcodes*)  52  "4")
-(address-> (value *symbolcodes*)  51  "3")
-(address-> (value *symbolcodes*)  50  "2")
-(address-> (value *symbolcodes*)  49  "1")
-(address-> (value *symbolcodes*)  48  "0")
-(address-> (value *symbolcodes*)  47  "/")
-(address-> (value *symbolcodes*)  46  ".")
-(address-> (value *symbolcodes*)  45  "-")
-(address-> (value *symbolcodes*)  43  "+")
-(address-> (value *symbolcodes*)  42  "*")
-(address-> (value *symbolcodes*)  39  "'")
-(address-> (value *symbolcodes*)  38  "&")
-(address-> (value *symbolcodes*)  37  "%")
-(address-> (value *symbolcodes*)  36  "$")
-(address-> (value *symbolcodes*)  35  "#")
-(address-> (value *symbolcodes*)  33  "!")     
+\\           Copyright (c) 2010-2019, Mark Tarver
 
-(define lineread
-  -> (lineread-loop (read-byte) []))
+\\                  All rights reserved.
 
-(define lineread-loop
-  Byte _ -> (error "line read aborted")  where (= Byte (hat))
-  Byte Bytes -> (let Line (compile (function <st_input>) Bytes [])
-                      (if (or (= Line (fail)) (empty? Line))
-                          (lineread-loop (read-byte) (append Bytes [Byte]))
-                          Line))	where (element? Byte [(newline) (carriage-return)])
-  Byte Bytes -> (lineread-loop (read-byte) (append Bytes [Byte])))
+(package shen [shen]
 
 (define read-file
   File -> (let Bytelist (read-file-as-bytelist File)
-               (compile (function <st_input>) Bytelist (function read-error))))
+               S-exprs  (trap-error (compile (/. X (<s-exprs> X)) Bytelist)
+                                    (/. E (reader-error (value *residue*))))
+               Process  (process-sexprs S-exprs)
+            Process))
 
-(define read-error
-  Bytes -> (error "read error here:~%~% ~A~%" (compress-50 50 Bytes)))
+(define reader-error
+  Residue -> (error (cn "reader error near here: "
+                    (reader-error-message (value *maximum-print-sequence-size*) 0 Residue))))
 
-(define compress-50
-  _ [] -> ""
-  0 _ -> ""
-  N [Byte | Bytes] -> (cn (n->string Byte) (compress-50 (- N 1) Bytes)))
+(define reader-error-message
+  _ _ [] -> ""
+  Max Max _ -> ""
+  Max N [Byte | Bytes] -> (cn (n->string Byte) (reader-error-message Max (+ N 1) Bytes)))
 
-(defcc <st_input>
-  <lsb> <st_input1> <rsb> <st_input2> 
-    := [(macroexpand (cons_form <st_input1>)) | <st_input2>];
-  <lrb>  <st_input1> <rrb> <st_input2> 
-   := (package-macro (macroexpand <st_input1>) <st_input2>);
-  <lcurly> <st_input> := [{ | <st_input>];
-  <rcurly> <st_input> := [} | <st_input>];    
-  <bar> <st_input> := [bar! | <st_input>];  
-  <semicolon> <st_input> := [; | <st_input>];
-  <colon> <equal> <st_input> := [:= | <st_input>];
-  <colon> <minus> <st_input> := [:- | <st_input>];
-  <colon> <st_input> := [: | <st_input>];
-  <comma> <st_input> := [, | <st_input>];
-  <comment> <st_input> := <st_input>;
-  <atom> <st_input> := [(macroexpand <atom>) | <st_input>];
-  <whitespaces> <st_input> := <st_input>;
-  <e> := [];)
-  
+(define it
+  -> (value *it*))
+
+(define read-file-as-bytelist
+ File -> (let  Stream (open File in)
+               Byte   (read-byte Stream)
+               Bytes  (read-file-as-bytelist-help Stream Byte [])
+               Close  (close Stream)
+           (reverse Bytes)))
+
+(define read-file-as-bytelist-help
+  Stream -1 Bytes -> Bytes
+  Stream Byte Bytes -> (read-file-as-bytelist-help Stream (read-byte Stream) [Byte | Bytes]))
+
+(define read-file-as-string
+   File -> (let Stream (open File in)
+             (rfas-h Stream (read-byte Stream) "")))
+
+(define rfas-h
+  Stream -1 String -> (do (close Stream) String)
+  Stream N String  -> (rfas-h Stream (read-byte Stream) (cn String (n->string N))))
+
+(define input
+  Stream -> (eval-kl (read Stream)))
+
+(define input+
+  Type Stream -> (let Mono? (monotype Type)
+                      Input (read Stream)
+                   (if (= false (typecheck Input (rectify-type Type)))
+                       (error "type error: ~R is not of type ~R~%" Input Type)
+                       (eval-kl Input))))
+
+(define monotype
+  [X | Y] -> (map (/. Z (monotype Z)) [X | Y])
+  X       -> (if (variable? X) (error "input+ expects a monotype: not ~A~%" X) X))
+
+(define lineread
+  Stream -> (read-loop Stream (my-read-byte Stream) [] (/. X (return? X))))
+
+(define read-from-string
+  String -> (let Bytelist (str->bytes String)
+                 S-exprs (compile (/. X (<s-exprs> X)) Bytelist)
+                 Process (process-sexprs S-exprs)
+                 Process))
+
+(define read-from-string-unprocessed
+  String -> (let Bytelist (str->bytes String)
+                 S-exprs (compile (/. X (<s-exprs> X)) Bytelist)
+                 S-exprs))
+
+(define str->bytes
+  "" -> []
+  (@s S Ss) -> [(string->n S) | (str->bytes Ss)])
+
+(define read
+  Stream -> (hd (read-loop Stream (my-read-byte Stream) [] (/. X (whitespace? X)))))
+
+(define my-read-byte
+  Stream -> (if (char-stinput? Stream)
+                (string->n (read-unit-string Stream))
+                (read-byte Stream)))
+
+(define read-loop
+   _ 94 Bytes Terminate?      -> (error "read aborted")
+  _ -1 Bytes Terminate?       -> (if (empty? Bytes)
+                                     (simple-error "error: empty stream")
+                                     (compile (/. X (<s-exprs> X)) Bytes))
+  Stream 0 Bytes Terminate?    -> (read-loop Stream (my-read-byte Stream) Bytes Terminate?)
+  Stream Byte Bytes Terminate? -> (if (Terminate? Byte)
+                                      (let Parse (try-parse Bytes)
+                                          (if (nothing-doing? Parse)
+                                              (read-loop Stream
+                                                         (my-read-byte Stream)
+                                                         (append Bytes [Byte])
+                                                         Terminate?)
+                                              (do (record-it Bytes) Parse)))
+                                      (read-loop Stream
+                                                (my-read-byte Stream)
+                                                (append Bytes [Byte])
+                                                Terminate?)))
+
+(define try-parse
+   Bytes -> (let S-exprs (trap-error (compile (/. X (<s-exprs> X)) Bytes) (/. E i-failed!))
+                 (if (nothing-doing? S-exprs)
+                     i-failed!
+                     (process-sexprs S-exprs))))
+
+(define nothing-doing?
+   i-failed! -> true
+   [] -> true
+   _ -> false)
+
+(define record-it
+  Bytes -> (set *it* (bytes->string Bytes)))
+
+(define bytes->string
+    [] -> ""
+    [Byte | Bytes] -> (cn (n->string Byte) (bytes->string Bytes)))
+
+(define process-sexprs
+   S-exprs -> (let Unpack&Expand (unpackage&macroexpand S-exprs)
+                   FindArities (find-arities Unpack&Expand)
+                   Types (find-types Unpack&Expand)
+                   (map (/. X (process-applications X Types)) Unpack&Expand)))
+
+(define find-types
+  [Colon A | X] -> [A | (find-types X)]  where (= Colon (intern ":"))
+  [X | Y] -> (append (find-types X) (find-types Y))
+  X -> [])
+
+(define find-arities
+  [define F { | X] -> (store-arity F (find-arity F 1 X))
+  [define F | X] -> (store-arity F (find-arity F 0 X))
+  [X | Y] -> (map (/. Z (find-arities Z)) [X | Y])
+  _ -> skip)
+
+(define store-arity
+  F N -> (let ArityF (arity F)
+           (cases (= ArityF -1) (execute-store-arity F N)
+                  (= ArityF N)  skip
+                  (sysfunc? F)  (error "~A is a system function~%" F)
+                  true (do (output "changing the arity of ~A may cause errors~%" F)
+                           (execute-store-arity F N)))))
+
+(define execute-store-arity
+  F 0 -> (put F arity 0)
+  F N -> (do (put F arity N)
+             (update-lambdatable F N)))
+
+(define update-lambdatable
+  F N -> (let Lambda (eval-kl (lambda-function [F] N))
+              Insert (set-lambda-form-entry [F | Lambda])
+              N))
+
+(define lambda-function
+  _ 0 -> skip
+  FX 1 -> (let X (protect (gensym Y)) [lambda X (append FX [X])])
+  FX N -> (let X (protect (gensym Y)) [lambda X (lambda-function (append FX [X]) (- N 1))]))
+
+(define assoc->
+  F X [] -> [[F | X]]
+  F X [[F | _] | Y] -> [[F | X] | Y]
+  F X [Y | Z] -> [Y | (assoc-> F X Z)]
+  _ _ _ -> (simple-error "implementation error in shen.assoc->"))
+
+(define find-arity
+  _ 0 [X | _] -> 0  where (= X ->)
+  _ 0 [X | _] -> 0  where (= X <-)
+  F 0 [_ | X] -> (+ 1 (find-arity F 0 X))
+  F 1 [} | X] -> (find-arity F 0 X)
+  F 1 [_ | X] -> (find-arity F 1 X)
+  F 1 _ -> (error "syntax error in ~A definition: missing }~%" F)
+  F _ _ -> (error "syntax error in ~A definition: missing -> or <-~%" F))
+
+(defcc <s-exprs>
+  <lsb> <s-exprs1> <rsb> <s-exprs2>  := [(cons-form <s-exprs1>) | <s-exprs2>];
+  <lrb> <s-exprs1> <rrb> <s-exprs2>  := (add-sexpr <s-exprs1> <s-exprs2>);
+  <lcurly> <s-exprs>                 := [{ | <s-exprs>];
+  <rcurly> <s-exprs>                 := [} | <s-exprs>];
+  <bar> <s-exprs>                    := [bar! | <s-exprs>];
+  <semicolon> <s-exprs>              := [(intern ";") | <s-exprs>];
+  <colon> <equal> <s-exprs>          := [(intern ":=") | <s-exprs>];
+  <colon> <s-exprs>                  := [(intern ":") | <s-exprs>];
+  <comma> <s-exprs>                  := [(intern ",") | <s-exprs>];
+  <comment> <s-exprs>                := <s-exprs>;
+  <atom> <s-exprs>                   := [<atom> | <s-exprs>];
+  <whitespaces> <s-exprs>            := <s-exprs>;
+  <e>                                := [];)
+
+(define add-sexpr
+  [$ X] Y -> (append (explode X) Y)
+  X Y -> [X | Y])
+
 (defcc <lsb>
-   -*- := (if (= -*- 91) skip (fail));)  
-   
+   91 := skip;)
+
 (defcc <rsb>
-   -*- := (if (= -*- 93) skip (fail));)     
-  
-(defcc <lcurly>
-  -*- := (if (= -*- 123) skip (fail));)
-  
-(defcc <rcurly>
-  -*- := (if (= -*- 125) skip (fail));)
-  
-(defcc <bar>
-  -*- := (if (= -*- 124) skip (fail));)  
-  
-(defcc <semicolon>
-  -*- := (if (= -*- 59) skip (fail));) 
-  
-(defcc <colon>
-  -*- := (if (= -*- 58) skip (fail));)     
-      
-(defcc <comma>
-  -*- := (if (= -*- 44) skip (fail));)  
-  
-(defcc <equal>
-   -*- := (if (= -*- 61) skip (fail));)     
-   
-(defcc <minus>
-   -*- := (if (= -*- 45) skip (fail));)      
-  
+   93 := skip;)
+
+(defcc <s-exprs1>
+  <s-exprs> := <s-exprs>;)
+
+(defcc <s-exprs2>
+  <s-exprs> := <s-exprs>;)
+
+(define cons-form
+  []              -> []
+  [X Bar Y]       -> [cons X Y]	                      where (= Bar bar!)
+  [X Bar Y Z | _] -> (error "misapplication of |~%")  where (= Bar bar!)
+  [X | Y]         -> [cons X (cons-form Y)])
+
 (defcc <lrb>
-  -*- := (if (= -*- 40) skip (fail));)
-  
+  40 := skip;)
+
 (defcc <rrb>
-  -*- := (if (= -*- 41) skip (fail));)   
-  
-(defcc <atom>
-  <str> := (control-chars <str>); 
-  <number>; 
-  <sym>;)
+  41 := skip;)
 
-(define control-chars
-  [] -> ""
-  ["c" "#" | Ss]
-   -> (let CodePoint (code-point Ss)
-           AfterCodePoint (after-codepoint Ss)
-           (@s (n->string (decimalise CodePoint)) (control-chars AfterCodePoint)))  
-  [S | Ss] -> (@s S (control-chars Ss)))
-                          
-(define code-point
-  [";" | _] -> ""
-  [S | Ss] -> [S | (code-point Ss)]  
-                     where (element? S ["0" "1" "2" "3" "4" "5" "6" "7" "8" "9" "0"])
-  S -> (error "code point parse error ~A~%" S))                          
-                          
-(define after-codepoint
-   [] -> []
-   [";" | Ss] -> Ss
-   [_ | Ss] -> (after-codepoint Ss))                          
-                          
-(define decimalise
-  S -> (pre (reverse (digits->integers S)) 0))
+(defcc <lcurly>
+  123 := skip;)
 
-(define digits->integers
-  ["0" | S] -> [0 | (digits->integers S)]
-  ["1" | S] -> [1 | (digits->integers S)]
-  ["2" | S] -> [2 | (digits->integers S)]
-  ["3" | S] -> [3 | (digits->integers S)]
-  ["4" | S] -> [4 | (digits->integers S)]
-  ["5" | S] -> [5 | (digits->integers S)]
-  ["6" | S] -> [6 | (digits->integers S)]
-  ["7" | S] -> [7 | (digits->integers S)]
-  ["8" | S] -> [8 | (digits->integers S)]
-  ["9" | S] -> [9 | (digits->integers S)]
-   _ -> [])
+(defcc <rcurly>
+  125 := skip;)
 
-(defcc <sym>
-  <alpha> <symchars> := (intern (cn <alpha> <symchars>));
-  <alpha> := (intern <alpha>);)
-  
-(defcc <symchars>
-   <symchar> <symchars> := (cn <symchar> <symchars>);
-   <symchar> := <symchar>;)  
-   
-(defcc <symchar>
-    <alpha>;
-    <digit->string>;)
+(defcc <bar>
+  124 := skip;)
 
-(defcc <digit->string>   
-  -*- := (if (digit-byte? -*-) 
-             (n->string -*-) 
-             (fail));)   
+(defcc <semicolon>
+  59 := skip;)
 
-(define digit-byte?
-  48 -> true
-  49 -> true
-  50 -> true
-  51 -> true 
-  52 -> true
-  53 -> true 
-  54 -> true 
-  55 -> true
-  56 -> true 
-  57 -> true
-  _ -> false)
-   
-(defcc <alpha>
-  -*- := (let S (symbol-byte->string -*-)
-             (if (= S (fail))  
-                 (fail)
-                 S));)
-                 
-(define symbol-byte->string
-  Byte -> (<-address (value *symbolcodes*) Byte))              
-  
-(defcc <str>
-  <dbq> <strcontents> <dbq> := <strcontents>;)
-  
-(defcc <dbq>
-  -*- := (if (= -*- 34) skip (fail));)    
-  
-(defcc <strcontents>
-  <strc> <strcontents> := [<strc> | <strcontents>];
-  <e> := [];)
-  
-(defcc <byte>
-  -*- := (n->string -*-);)  
-  
-(defcc <strc>
-  -*- := (if (= -*- 34) (fail) (n->string -*-));)
-  
-(defcc <backslash>
-  -*- := (if (= -*- 92) skip (fail));)
-  
-(defcc <number>
-   <minus> <number> := (- 0 <number>);
-   <plus> <number> := <number>;
-   <predigits> <stop> <postdigits> <E> <log10> 
-   := (* (expt 10 <log10>) (+ (pre (reverse <predigits>) 0) (post <postdigits> 1)));
-   <digits> <E> <log10> := (* (expt 10 <log10>) (pre (reverse <digits>) 0));
-   <predigits> <stop> <postdigits> 
-   := (+ (pre (reverse <predigits>) 0) (post <postdigits> 1));
-   <digits> := (pre (reverse <digits>) 0);)
+(defcc <colon>
+  58 := skip;)
 
-(defcc <E>
-   101;)
+(defcc <comma>
+  44 := skip;)
 
-(defcc <log10>
-  <minus> <digits> := (- 0 (pre (reverse <digits>) 0));
-  <digits> := (pre (reverse <digits>) 0);)
-   
-(defcc <plus>
-  -*- := (if (= -*-  43) skip (fail));)
-  
-(defcc <stop>
-  -*- := (if (= -*- 46) skip (fail));)      
-   
-(defcc <predigits>
-    <digits>;
-    <e> := [];)
-    
-(defcc <postdigits>
-    <digits>;)
-
-(defcc <digits>
-   <digit> <digits> := [<digit> | <digits>];
-   <digit> := [<digit>];)
- 
-(defcc <digit>
-  -*- := (if (digit-byte? -*-) (byte->digit -*-) (fail));)
-  
-(define byte->digit  
-  48 -> 0   
-  49 -> 1  
-  50 -> 2  
-  51 -> 3  
-  52 -> 4  
-  53 -> 5  
-  54 -> 6
-  55 -> 7   
-  56 -> 8   
-  57 -> 9)
-  
-(define pre
-  [] _ -> 0
-  [N | Ns] Expt -> (+ (* (expt 10 Expt) N) (pre Ns (+ Expt 1))))
-  
-(define post
-  [] _ -> 0
-  [N | Ns] Expt -> (+ (* (expt 10 (- 0 Expt)) N) (post Ns (+ Expt 1)))) 
-    
-(define expt
-  _ 0 -> 1
-  Base Expt -> (* Base (expt Base (- Expt 1)))  where (> Expt 0)
-  Base Expt -> (* 1.0 (/ (expt Base (+ Expt 1)) Base)))  
-  
-(defcc <st_input1>
-  <st_input> := <st_input>;)
-
-(defcc <st_input2>
-  <st_input> := <st_input>;)
+(defcc <equal>
+  61 := skip;)
 
 (defcc <comment>
-  <backslash> <times> <any> <times> <backslash> := skip;)  
- 
+  <singleline> := skip;
+  <multiline>  := skip;)
+
+(defcc <singleline>
+  <backslash> <backslash> <shortnatters> <returns> := skip;)
+
+(defcc <backslash>
+  92 := skip;)
+
+(defcc <shortnatters>
+   <shortnatter> <shortnatters> := skip;
+   <e> := skip;)
+
+(defcc <shortnatter>
+   Byte := skip   where (not (return? Byte));)
+
+(defcc <returns>
+  <return> <returns> := skip;
+  <return>           := skip;)
+
+(defcc <return>
+  Byte := skip  where (return? Byte);)
+
+(define return?
+  Byte -> (element? Byte [9 10 13]))
+
+(defcc <multiline>
+  <backslash> <times> <longnatter> := skip;)
+
 (defcc <times>
-  -*- := (if (= -*- 42) skip (fail));)       
+  42 := skip;)
 
-(defcc <any>
-  <comment> <any> := skip;
-  <blah> <any> := skip;
-  <e> := skip;)
+(defcc <longnatter>
+  <comment> <longnatter> := skip;
+  <times> <backslash> := skip;
+  _ <longnatter> := skip;)
 
-(defcc <blah>
-  -*- := (if (end-of-comment? -s-) (fail) skip);)
+(defcc <atom>
+  <str> := <str>;
+  <number> := <number>;
+  <sym> := (if (= <sym> "<>")
+               [vector 0]
+               (intern <sym>));)
 
-(define end-of-comment?
-  [42 92 | _] -> true   
-  _ -> false)  
+(defcc <sym>
+  <alpha> <alphanums> := (cn <alpha> <alphanums>);)
+
+(defcc <alpha>
+  Byte := (n->string Byte)	  where (alpha? Byte);)
+
+(define alpha?
+  Byte -> (or (lowercase? Byte) (uppercase? Byte) (misc? Byte)))
+
+(define lowercase?
+   Byte -> (and (>= Byte 97) (<= Byte 122)))
+
+(define uppercase?
+   Byte -> (and (>= Byte 65) (<= Byte 90)))
+
+(define misc?
+  Byte -> (element? Byte [61 45 42 47 43 95 63 36 33 64 126
+                          46 62 60 38 37 39 35 96]))
+
+(defcc <alphanums>
+   <alphanum> <alphanums> := (cn <alphanum> <alphanums>);
+   <e> := "";)
+
+(defcc <alphanum>
+    <alpha> := <alpha>;
+    <numeral> := <numeral>;)
+
+(defcc <numeral>
+  Byte := (n->string Byte)    where (digit? Byte);)
+
+(define digit?
+  Byte -> (and (>= Byte 48) (<= Byte 57)))
+
+(defcc <str>
+  <dbq> <strcontents> <dbq> := <strcontents>;)
+
+(defcc <dbq>
+  34 := skip;)
+
+(defcc <strcontents>
+  <strc> <strcontents> := (cn <strc> <strcontents>);
+  <e> := "";)
+
+(defcc <strc>
+   <control>;
+   <notdbq>;)
+
+(defcc <control>
+   <lowC> <hash> <integer> <semicolon> := (n->string <integer>);)
+
+(defcc <notdbq>
+   Byte := (n->string Byte)	 where (not (= Byte 34));)
+
+(defcc <lowC>
+  99 := skip;)
+
+(defcc <hash>
+  35 := skip;)
+
+(defcc <number>
+   <minus> <number> := (- 0 <number>);
+   <plus> <number>  := <number>;
+   <e-number>;
+   <float>;
+   <integer>;)
+
+(defcc <minus>
+  45 := skip;)
+
+(defcc <plus>
+  43 := skip;)
+
+(defcc <integer>
+  <digits> := (compute-integer <digits>);)
+
+(defcc <digits>
+  <digit> <digits> := [<digit> | <digits>];
+  <digit> := [<digit>];)
+
+(defcc <digit>
+  Byte := (byte->digit Byte)  where (digit? Byte);)
+
+(define byte->digit
+    Byte -> (- Byte 48))
+
+(define compute-integer
+  Digits -> (compute-integer-h (reverse Digits) 0))
+
+(define compute-integer-h
+  [] _ -> 0
+  [Digit | Digits] Expt -> (+ (* (expt 10 Expt) Digit) (compute-integer-h Digits (+ Expt 1))))
+
+(define expt
+  _ 0       -> 1
+  Base Expt -> (* Base (expt Base (- Expt 1)))  where (> Expt 0)
+  Base Expt -> (/ (expt Base (+ Expt 1)) Base))
+
+(defcc <float>
+  <integer> <stop> <fraction> := (+ <integer> <fraction>);
+  <stop> <fraction> := <fraction>;)
+
+(defcc <stop>
+  46 := skip;)
+
+(defcc <fraction>
+  <digits> := (compute-fraction <digits>);)
+
+(define compute-fraction
+  Digits -> (compute-fraction-h Digits -1))
+
+(define compute-fraction-h
+  [] _ -> 0
+  [Digit | Digits] Expt -> (+ (* (expt 10 Expt) Digit)
+                              (compute-fraction-h Digits (- Expt 1))))
+
+(defcc <e-number>
+  <float> <lowE> <log10> 	 := (compute-E <float> <log10>);
+  <integer> <lowE> <log10>  := (compute-E <integer> <log10>);)
+
+(defcc <log10>
+  <plus> <log10> := <log10>;
+  <minus> <log10> := (- 0 <log10>);
+  <integer>;)
+
+(defcc <lowE>
+  101 := skip;)
+
+(define compute-E
+  N Log10 -> (* N (expt 10 Log10)))
 
 (defcc <whitespaces>
   <whitespace> <whitespaces> := skip;
   <whitespace> := skip;)
 
 (defcc <whitespace>
-  -*- := (let Case -*-
-              (cases (= Case 32) skip 
-                     (= Case 13) skip
-                     (= Case 10) skip
-                     (= Case 9) skip
-                     true (fail)));)                      
+  Byte := skip     where  (whitespace? Byte);)
 
-(define cons_form
+(define whitespace?
+  32 -> true
+  13 -> true
+  10 -> true
+  9  -> true
+  _  -> false)
+
+(define unpackage&macroexpand
   [] -> []
-  [X bar! Y] -> [cons X Y]	
-  [X | Y] -> [cons X (cons_form Y)])  
- 
-(define package-macro
-    [$ S] Stream -> (append (explode S) Stream)
-    [package null _ | Code] Stream -> (append Code Stream)
-    [package PackageName Exceptions | Code] Stream
-     -> (let ListofExceptions (eval-without-macros Exceptions)
-             Record (record-exceptions ListofExceptions PackageName)
-             (append (packageh PackageName ListofExceptions Code) Stream))
-    X Stream -> [X | Stream])  
+  [Package | S-exprs] -> (unpackage&macroexpand (append (unpackage Package) S-exprs))  where (packaged? Package)
+  [S-expr | S-exprs]  -> (let M (macroexpand S-expr)
+                           (if (packaged? M)
+                               (unpackage&macroexpand [M | S-exprs])
+                               [M | (unpackage&macroexpand S-exprs)])))
 
-(define record-exceptions 
-  ListofExceptions PackageName 
-   -> (let CurrExceptions (trap-error (get PackageName external-symbols) (/. E []))
-           AllExceptions (union ListofExceptions CurrExceptions)
-           (put PackageName external-symbols AllExceptions)))   
-       
-(define packageh
-    PackageName Exceptions [X | Y] 
-      -> [(packageh PackageName Exceptions X) | (packageh PackageName Exceptions Y)]
-    PackageName Exceptions X -> X  
-                 where (or (sysfunc? X) (variable? X) (element? X Exceptions)
-                           (doubleunderline? X) (singleunderline? X))
-    PackageName Exceptions X -> (concat PackageName X)   
-             where (and (symbol? X) (not (prefix? ["s" "h" "e" "n" "-"] (explode X))))
-    _ _ X -> X) 
+(define packaged?
+  [package P E | Code] -> true
+  _                    -> false)
 
-(define read-from-string
-  S -> (let Ns (map (function string->n) (explode S))
-            (compile (function shen-<st_input>) 
-                     Ns 
-                     (function shen-read-error))))
+(define unpackage
+  [package null _ | S-exprs]     -> S-exprs
+  [package P External | S-exprs] -> (let External! (eval External)
+                                         Package (package-symbols (str P) External! S-exprs)
+                                         RecordExternal (record-external P External!)
+                                         RecordInternal (record-internal P External! S-exprs)
+                                      Package))
+
+(define record-internal
+  P External! S-exprs -> (let Old (trap-error (get P internal-symbols) (/. E []))
+                              New (internal-symbols (str P) External! S-exprs)
+                           (put P internal-symbols (union New Old))))
+
+(define internal-symbols
+  P External [X | Y] -> (union (internal-symbols P External X) (internal-symbols P External Y))
+  P External X       -> [(intern-in-package P X)]  where (internal? X P External)
+  _ _ _ -> [])
+
+(define record-external
+  P E* -> (let External (trap-error (get P external-symbols) (/. E []))
+            (put P external-symbols (union E* External))))
+
+(define package-symbols
+  P External [S-expr | S-exprs] -> (map (/. X (package-symbols P External X))
+                                        [S-expr | S-exprs])
+  P External S-expr -> (intern-in-package P S-expr)     where (internal? S-expr P External)
+  _ _ S-expr -> S-expr)
+
+(define intern-in-package
+  P S-expr -> (intern (@s P "." (str S-expr))))
+
+(define internal?
+  S-expr P External -> (and (not (element? S-expr External))
+                            (not (sng? S-expr))
+                            (not (dbl? S-expr))
+                            (symbol? S-expr)
+                            (not (sysfunc? S-expr))
+                            (not (variable? S-expr))
+                            (not (internal-to-shen? (str S-expr)))
+                            (not (internal-to-P? P (str S-expr)))))
+
+(define internal-to-shen?
+  (@s "shen." _) -> true
+  _              -> false)
+
+(define sysfunc?
+  F -> (element? F (get shen external-symbols)))
+
+(define internal-to-P?
+  "" (@s "." _)        -> true
+  (@s S Ss) (@s S Ss*) -> (internal-to-P? Ss Ss*)
+  _ _                  -> false)
+
+(define process-applications
+  X Types -> X  where (element? X Types)
+  [cond | X] Types -> [cond | (process-cond-clauses X Types)]
+  [F | X] Types -> (special-case F [F | X] Types)   where (non-application? F)
+  [F | X] Types -> (process-application (map (/. Y (process-applications Y Types)) [F | X]) Types)
+  X _ -> X)
+
+(define non-application?
+  define -> true
+  defun  -> true
+  synonyms -> true
+  F      -> true   where (special? F)
+  F      -> true   where (extraspecial? F)
+  _      -> false)
+
+(define special-case
+  lambda [lambda X Y] Types     -> [lambda X (process-applications Y Types)]
+  let [let X Y Z]     Types     -> [let X (process-applications Y Types) (process-applications Z Types)]
+  defun [defun F X Y] Types     -> [defun F X Y]
+  define [define F { | X] Types -> [define F { | (process-after-type F X Types)]
+  define [define F | X] Types   -> [define F | (map (/. Y (process-applications Y Types)) X)]
+  synonyms X _                  -> [synonyms | X]
+  type   [type X A] Types       -> [type (process-applications X Types) A]
+  input+ [input+ A X] Types     -> [input+ A (process-applications X Types)]
+  _ [F | X] Types               -> [F | (map (/. Y (process-applications Y Types)) X)]  where (special? F)
+  _ [F | X] Types               -> [F | X]   where (extraspecial? F))
+
+(define process-cond-clauses
+  []                   _     -> []
+  [[Test Body] | Rest] Types -> [[(process-applications Test Types) (process-applications Body Types)]
+                                 | (process-cond-clauses Rest Types)])
+
+(define process-after-type
+  F [} | X] Types -> [} | (map (/. Y (process-applications Y Types)) X)]
+  F [X | Y] Types -> [X | (process-after-type F Y Types)]
+  F _ Types -> (error "missing } in ~A~%" F))
+
+(define process-application
+  [F | X] Types -> (let ArityF (arity F)
+                        N (length X)
+                        (cases (element? [F | X] Types)           [F | X]
+                               (shen-call? F)                     [F | X]
+                               (foreign? [F | X])                 (unpack-foreign [F | X])
+                               (fn-call? [F | X])                 (fn-call [F | X])
+                               (zero-place? [F | X])              [F | X]
+                               (undefined-f? F ArityF)            (simple-curry [[fn F] | X])
+                               (variable? F)                      (simple-curry [F | X])
+                               (application? F)                   (simple-curry [F | X])
+                               (partial-application*? F ArityF N) (lambda-function [F | X] (- ArityF N))
+                               (overapplication? F ArityF N)      (simple-curry [[fn F] | X])
+                               true                               [F | X])))
+
+(define unpack-foreign
+  [[foreign F] | X] -> [F | X])
+
+(define foreign?
+  [[foreign F] | X] -> true
+  _ -> false)
+
+(define zero-place?
+  [F] -> true
+  _ -> false)
+
+(define shen-call?
+   F -> (and (symbol? F) (internal-to-shen? (str F))))
+
+(define application?
+  [protect _] -> false
+  [foreign _] -> false
+  F -> (cons? F))
+
+(define undefined-f?
+   F -1 -> (and (lowercase-symbol? F) (not (element? F (external shen))))
+   _ _ -> false)
+
+(define lowercase-symbol?
+  F -> (and (symbol? F) (not (variable? F))))
+
+(define simple-curry
+  [F X]       -> [F X]
+  [F X Y | Z] -> (simple-curry [[F X] Y | Z])
+  X -> X)
+
+(define function
+  F -> (fn F))
+
+(define fn
+  F -> (F) where (= (arity F) 0)
+  F -> (trap-error
+        (get F lambda-form)
+        (/. E (error  "fn: ~A is undefined~%" F))))
+
+(define fn-call?
+   [fn F] -> true
+   [function F] -> true
+   _ -> false)
+
+(define fn-call
+  [function F] -> (fn-call [fn F])
+  [fn F] -> (let ArityF (arity F)
+               (cases (= ArityF -1) [fn F]
+                      (= ArityF 0) [F]
+                      true (lambda-function [F] ArityF))))
+
+(define partial-application*?
+  F ArityF N -> (let Verdict (> ArityF N)
+                     Message (if (and Verdict (loading?) (not (element? F [+ -])))
+                                 (output "partial application of ~A~%" F)
+                                 skip)
+                     Verdict))
+
+(define loading?
+  -> (value *loading?*))
+
+(define overapplication?
+  _ -1 _ -> false
+  F ArityF N -> (let Verdict (< ArityF N)
+                     Message (if (and Verdict (loading?))
+                               (output "~A might not like ~A argument~A~%"
+                                        F N (if (= N 1) "" "s"))
+                               skip)
+                  Verdict))
+
+)

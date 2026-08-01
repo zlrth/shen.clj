@@ -1,479 +1,65 @@
+(defun macroexpand (V6939) (let W6940 (map (lambda Z6941 (tl Z6941)) (value *macros*)) (shen.macroexpand-h V6939 W6940 W6940)))
 
-"                                                   The License
- 
- The user is free to produce commercial applications with the software, to distribute these applications in source or binary  form, and to charge monies for them as he sees fit and in concordance with the laws of the land subject to the following  license.
- 
- 1. The license applies to all the software and all derived software and must appear on such.
- 2. It is illegal to distribute the software without this license attached to it and use of the software implies agreement 
-    with the license as such. It is illegal for anyone who is not the copyright holder to tamper with or change the license.
- 3. Neither the names of Lambda Associates or the copyright holder may be used to endorse or promote products built using
-     the software without specific prior written permission from the copyright holder.
- 4. That possession of this license does not confer on the copyright holder any special contractual obligation towards the    user. That in no event shall the copyright holder be liable for any direct, indirect, incidental, special, exemplary or   consequential damages (including but not limited to procurement of substitute goods or services, loss of use, data, or    profits; or business interruption), however caused and on any theory of liability, whether in contract, strict liability   or tort (including negligence) arising in any way out of the use of the software, even if advised of the possibility of   such damage. 
-5. It is permitted for the user to change the software, for the purpose of improving performance, correcting an error, or    porting to a new platform, and distribute the modified version of Shen (hereafter the modified version) provided the     resulting program conforms in all respects to the Shen standard and is issued under that title. The user must make it clear   with his distribution that he/she is the author of the changes and what these changes are and why. 
-6. Derived versions of this software in whatever form are subject to the same restrictions. In particular it is not          permitted to make derived copies of this software which do not conform to the Shen standard or appear under a different title.
-7. It is permitted to distribute versions of Shen which incorporate libraries, graphics or other facilities which are not    part of the Shen standard.
+(defun shen.macroexpand-h (V6950 V6951 V6952) (if (= () V6951) V6950 (if (cons? V6951) (let W6953 (shen.walk (hd V6951) V6950) (if (= V6950 W6953) (shen.macroexpand-h V6950 (tl V6951) V6952) (shen.macroexpand-h W6953 V6952 V6952))) (simple-error "implementation error in shen.macroexpand-h"))))
 
-For an explication of this license see http://www.lambdassociates.org/News/june11/license.htm which explains this license in full."
+(defun shen.walk (V6954 V6955) (if (cons? V6955) (V6954 (map (lambda Z6956 (shen.walk V6954 Z6956)) V6955)) (V6954 V6955)))
 
-(defun macroexpand (V530) (shen-compose (value *macros*) V530))
+(defun shen.macros (V6957) (let GoTo6958 (freeze V6957) (if (cons? V6957) (let Select6963 (hd V6957) (let Select6964 (tl V6957) (if (and (= defmacro Select6963) (cons? Select6964)) (shen.process-def (hd Select6964) (tl Select6964)) (if (= defcc Select6963) (shen.yacc->shen Select6964) (if (and (= u! Select6963) (and (cons? Select6964) (= () (tl Select6964)))) (cons protect (cons (shen.make-uppercase (hd Select6964)) ())) (if (and (= error Select6963) (cons? Select6964)) (cons simple-error (cons (shen.mkstr (hd Select6964) (tl Select6964)) ())) (if (and (= output Select6963) (cons? Select6964)) (cons pr (cons (shen.mkstr (hd Select6964) (tl Select6964)) (cons (cons stoutput ()) ()))) (if (and (= pr Select6963) (and (cons? Select6964) (= () (tl Select6964)))) (cons pr (cons (hd Select6964) (cons (cons stoutput ()) ()))) (if (and (= make-string Select6963) (cons? Select6964)) (shen.mkstr (hd Select6964) (tl Select6964)) (if (and (= lineread Select6963) (= () Select6964)) (cons lineread (cons (cons stinput ()) ())) (if (and (= input Select6963) (= () Select6964)) (cons input (cons (cons stinput ()) ())) (if (and (= read Select6963) (= () Select6964)) (cons read (cons (cons stinput ()) ())) (if (and (= input+ Select6963) (and (cons? Select6964) (= () (tl Select6964)))) (cons input+ (cons (hd Select6964) (cons (cons stinput ()) ()))) (if (and (= read-byte Select6963) (= () Select6964)) (shen.process-read-byte) (if (= prolog? Select6963) (shen.call-prolog Select6964) (if (and (= defprolog Select6963) (cons? Select6964)) (shen.compile-prolog (hd Select6964) (tl Select6964)) (if (and (= datatype Select6963) (cons? Select6964)) (shen.process-datatype (hd Select6964) (tl Select6964)) (if (= @s Select6963) (shen.process-@s V6957) (if (= synonyms Select6963) (shen.process-synonyms Select6964) (if (and (= nl Select6963) (= () Select6964)) (cons nl (cons 1 ())) (if (= let Select6963) (shen.process-let V6957) (if (= /. Select6963) (shen.process-lambda V6957) (if (= cases Select6963) (shen.process-cases V6957) (if (and (= time Select6963) (and (cons? Select6964) (= () (tl Select6964)))) (shen.process-time (hd Select6964)) (if (and (= put Select6963) (and (cons? Select6964) (and (cons? (tl Select6964)) (and (cons? (tl (tl Select6964))) (= () (tl (tl (tl Select6964)))))))) (cons put (cons (hd Select6964) (cons (hd (tl Select6964)) (cons (hd (tl (tl Select6964))) (cons (cons value (cons *property-vector* ())) ()))))) (if (and (= get Select6963) (and (cons? Select6964) (and (cons? (tl Select6964)) (= () (tl (tl Select6964)))))) (cons get (cons (hd Select6964) (cons (hd (tl Select6964)) (cons (cons value (cons *property-vector* ())) ())))) (if (and (= unput Select6963) (and (cons? Select6964) (and (cons? (tl Select6964)) (= () (tl (tl Select6964)))))) (cons unput (cons (hd Select6964) (cons (hd (tl Select6964)) (cons (cons value (cons *property-vector* ())) ())))) (if (and (= shen.@c Select6963) (and (cons? Select6964) (= () (tl Select6964)))) (shen.rcons_form (hd Select6964)) (let GoTo6959 (freeze (if (and (cons? Select6964) (and (cons? (tl Select6964)) (and (cons? (tl (tl Select6964))) (element? Select6963 (cons @p (cons @v (cons append (cons and (cons or (cons + (cons * (cons do ())))))))))))) (cons Select6963 (cons (hd Select6964) (cons (shen.process-assoc (cons Select6963 (tl Select6964))) ()))) (thaw GoTo6958))) (if (= shen.@ch Select6963) (if (cons? Select6964) (let Select6961 (hd Select6964) (let Select6962 (tl Select6964) (if (and (cons? Select6961) (and (cons? (tl Select6961)) (and (cons? (tl (tl Select6961))) (and (= () (tl (tl (tl Select6961)))) (and (= () Select6962) (= (hd (tl Select6961)) (intern ":"))))))) (shen.cons-form-respect-modes (cons - (cons (cons (hd Select6961) (cons (hd (tl Select6961)) (cons (cons + (tl (tl Select6961))) ()))) ()))) (if (= () Select6962) (shen.cons-form-respect-modes Select6961) (thaw GoTo6959))))) (thaw GoTo6959)) (thaw GoTo6959))))))))))))))))))))))))))))))) (thaw GoTo6958))))
 
-(defun macroexpand (V531)
- (let Y (shen-compose (value *macros*) V531)
-  (if (= V531 Y) V531 (shen-walk macroexpand Y))))
+(defun shen.cons-form-respect-modes (V6965) (let GoTo6966 (freeze V6965) (if (cons? V6965) (let Select6967 (hd V6965) (let Select6968 (tl V6965) (if (and (= + Select6967) (and (cons? Select6968) (= () (tl Select6968)))) (cons + (cons (shen.cons-form-respect-modes (hd Select6968)) ())) (if (and (= - Select6967) (and (cons? Select6968) (= () (tl Select6968)))) (cons - (cons (shen.cons-form-respect-modes (hd Select6968)) ())) (cons cons (cons (shen.cons-form-respect-modes Select6967) (cons (shen.cons-form-respect-modes Select6968) ()))))))) (thaw GoTo6966))))
 
-(set *macros*
- (cons shen-timer-macro
-  (cons shen-cases-macro
-   (cons shen-abs-macro
-    (cons shen-put/get-macro
-     (cons shen-compile-macro
-      (cons shen-yacc-macro
-       (cons shen-datatype-macro
-        (cons shen-let-macro
-         (cons shen-assoc-macro
-          (cons shen-i/o-macro
-           (cons shen-prolog-macro
-            (cons shen-synonyms-macro
-             (cons shen-nl-macro
-              (cons shen-vector-macro
-               (cons shen-@s-macro
-                (cons shen-defmacro-macro
-                 (cons shen-defprolog-macro
-                  (cons shen-function-macro ())))))))))))))))))))
+(defun shen.process-def (V6969 V6970) (let W6971 (cons X (cons -> (cons X ()))) (let W6972 (eval (cons define (cons V6969 (append V6970 W6971)))) (let W6973 (shen.record-macro V6969 (fn V6969)) V6969))))
 
-(defun shen-compose (V532 V533)
- (cond ((= () V532) V533)
-  ((cons? V532) (shen-compose (tl V532) ((hd V532) V533)))
-  (true (shen-sys-error shen-compose))))
+(defun shen.process-let (V6974) (if (and (cons? V6974) (and (= let (hd V6974)) (and (cons? (tl V6974)) (and (cons? (tl (tl V6974))) (and (cons? (tl (tl (tl V6974)))) (cons? (tl (tl (tl (tl V6974)))))))))) (cons let (cons (hd (tl V6974)) (cons (hd (tl (tl V6974))) (cons (cons let (tl (tl (tl V6974)))) ())))) V6974))
 
-(defun shen-compile-macro (V534)
- (cond
-  ((and (cons? V534)
-    (and (= compile (hd V534))
-     (and (cons? (tl V534))
-      (and (cons? (tl (tl V534))) (= () (tl (tl (tl V534))))))))
-   (cons compile
-    (cons (hd (tl V534)) (cons (hd (tl (tl V534))) (cons () ())))))
-  (true V534)))
+(defun shen.process-@s (V6975) (let GoTo6977 (freeze V6975) (if (cons? V6975) (let Select6984 (tl V6975) (if (= @s (hd V6975)) (if (cons? Select6984) (let Select6982 (hd Select6984) (let Select6983 (tl Select6984) (if (cons? Select6983) (let Select6981 (tl Select6983) (if (cons? Select6981) (cons @s (cons Select6982 (cons (shen.process-@s (cons @s Select6983)) ()))) (if (and (= () Select6981) (string? Select6982)) (let W6976 (explode Select6982) (if (> (length W6976) 1) (shen.process-@s (cons @s (append W6976 Select6983))) V6975)) (thaw GoTo6977)))) (thaw GoTo6977)))) (thaw GoTo6977)) (thaw GoTo6977))) (thaw GoTo6977))))
 
-(defun shen-prolog-macro (V535)
- (cond
-  ((and (cons? V535) (= prolog? (hd V535)))
-   (cons shen-intprolog (cons (shen-prolog-form (tl V535)) ())))
-  (true V535)))
+(defun shen.process-datatype (V6985 V6986) (let W6987 (shen.intern-type V6985) (let W6988 (compile (lambda Z6989 (shen.<datatype> Z6989)) (cons W6987 V6986)) W6987)))
 
-(defun shen-defprolog-macro (V536)
- (cond
-  ((and (cons? V536) (and (= defprolog (hd V536)) (cons? (tl V536))))
-   (compile (lambda V537 (shen-<defprolog> V537)) (tl V536)
-    (lambda Y (shen-prolog-error (hd (tl V536)) Y))))
-  (true V536)))
+(defun shen.intern-type (V6990) (intern (cn (str V6990) "#type")))
 
-(defun shen-prolog-form (V538)
- (shen-cons_form (map (lambda V539 (shen-cons_form V539)) V538)))
+(defun shen.process-synonyms (V6991) (shen.synonyms-h (set shen.*synonyms* (append V6991 (value shen.*synonyms*)))))
 
-(defun shen-datatype-macro (V540)
- (cond
-  ((and (cons? V540) (and (= datatype (hd V540)) (cons? (tl V540))))
-   (cons shen-process-datatype
-    (cons (hd (tl V540))
-     (cons
-      (cons compile
-       (cons (cons function (cons shen-<datatype-rules> ()))
-        (cons (shen-rcons_form (tl (tl V540)))
-         (cons (cons function (cons shen-datatype-error ())) ()))))
-      ()))))
-  (true V540)))
+(defun shen.lambda-of-defun (V6994) (if (and (cons? V6994) (and (= defun (hd V6994)) (and (cons? (tl V6994)) (and (cons? (tl (tl V6994))) (and (cons? (hd (tl (tl V6994)))) (and (= () (tl (hd (tl (tl V6994))))) (and (cons? (tl (tl (tl V6994)))) (= () (tl (tl (tl (tl V6994)))))))))))) (eval (cons /. (cons (hd (hd (tl (tl V6994)))) (tl (tl (tl V6994)))))) (shen.f-error shen.lambda-of-defun)))
 
-(defun shen-defmacro-macro (V541)
- (cond
-  ((and (cons? V541) (and (= defmacro (hd V541)) (cons? (tl V541))))
-   (let Macro (compile shen-<defmacro> (tl V541) ())
-    (let Declare
-     (cons do
-      (cons
-       (cons set
-        (cons *macros*
-         (cons
-          (cons adjoin
-           (cons (hd (tl V541)) (cons (cons value (cons *macros* ())) ())))
-          ())))
-       (cons macro ())))
-     (let Package
-      (cons package (cons null (cons () (cons Declare (cons Macro ())))))
-      Package))))
-  (true V541)))
+(defun shen.synonyms-h (V6995) (let W6996 (map (lambda Z6997 (shen.curry-type Z6997)) V6995) (let W6998 (shen.lambda-of-defun (shen.shendef->kldef shen.demod (shen.compile-synonyms W6996))) (let W6999 (set shen.*demodulation-function* W6998) synonyms))))
 
-(defun shen-defmacro-macro (V542)
- (cond
-  ((and (cons? V542) (and (= defmacro (hd V542)) (cons? (tl V542))))
-   (let Macro
-    (cons define
-     (cons (hd (tl V542))
-      (append (tl (tl V542)) (cons X (cons -> (cons X ()))))))
-    (let Declare
-     (cons do
-      (cons
-       (cons set
-        (cons *macros*
-         (cons
-          (cons adjoin
-           (cons (hd (tl V542)) (cons (cons value (cons *macros* ())) ())))
-          ())))
-       (cons macro ())))
-     (let Package
-      (cons package (cons null (cons () (cons Declare (cons Macro ())))))
-      Package))))
-  (true V542)))
+(defun shen.compile-synonyms (V7002) (if (= () V7002) (let W7003 (gensym X) (cons W7003 (cons -> (cons W7003 ())))) (if (and (cons? V7002) (cons? (tl V7002))) (cons (shen.rcons_form (hd V7002)) (cons -> (cons (shen.rcons_form (hd (tl V7002))) (shen.compile-synonyms (tl (tl V7002)))))) (simple-error "synonyms requires an even number of arguments
+"))))
 
-(defun shen-<defmacro> (V543)
- (let Result
-  (let Parse_<name> (shen-<name> V543)
-   (if (not (= (fail) Parse_<name>))
-    (let Parse_<macrorules> (shen-<macrorules> Parse_<name>)
-     (if (not (= (fail) Parse_<macrorules>))
-      (shen-reassemble (fst Parse_<macrorules>)
-       (cons define (cons (snd Parse_<name>) (snd Parse_<macrorules>))))
-      (fail)))
-    (fail)))
-  (if (= Result (fail)) (fail) Result)))
+(defun shen.process-lambda (V7004) (let GoTo7005 (freeze V7004) (if (cons? V7004) (let Select7012 (tl V7004) (if (= /. (hd V7004)) (if (cons? Select7012) (let Select7010 (hd Select7012) (let Select7011 (tl Select7012) (if (cons? Select7011) (let Select7009 (tl Select7011) (if (cons? Select7009) (cons lambda (cons Select7010 (cons (shen.process-lambda (cons /. Select7011)) ()))) (if (= () Select7009) (if (variable? Select7010) (cons lambda Select7012) (simple-error (shen.app Select7010 " is not a variable
+" shen.s))) (thaw GoTo7005)))) (thaw GoTo7005)))) (thaw GoTo7005)) (thaw GoTo7005))) (thaw GoTo7005))))
 
-(defun shen-<macrorules> (V544)
- (let Result
-  (let Parse_<macrorule> (shen-<macrorule> V544)
-   (if (not (= (fail) Parse_<macrorule>))
-    (let Parse_<macrorules> (shen-<macrorules> Parse_<macrorule>)
-     (if (not (= (fail) Parse_<macrorules>))
-      (shen-reassemble (fst Parse_<macrorules>)
-       (append (snd Parse_<macrorule>) (snd Parse_<macrorules>)))
-      (fail)))
-    (fail)))
-  (if (= Result (fail))
-   (let Result
-    (let Parse_<macrorule> (shen-<macrorule> V544)
-     (if (not (= (fail) Parse_<macrorule>))
-      (shen-reassemble (fst Parse_<macrorule>)
-       (append (snd Parse_<macrorule>) (cons X (cons -> (cons X ())))))
-      (fail)))
-    (if (= Result (fail)) (fail) Result))
-   Result)))
+(defun shen.process-cases (V7015) (let GoTo7016 (freeze V7015) (if (cons? V7015) (let Select7024 (tl V7015) (if (= cases (hd V7015)) (if (cons? Select7024) (let Select7022 (hd Select7024) (let Select7023 (tl Select7024) (if (and (= true Select7022) (cons? Select7023)) (hd Select7023) (let GoTo7019 (freeze (if (= () Select7023) (simple-error "error: odd number of case elements
+") (thaw GoTo7016))) (if (cons? Select7023) (let Select7020 (hd Select7023) (let Select7021 (tl Select7023) (if (= () Select7021) (cons if (cons Select7022 (cons Select7020 (cons (cons simple-error (cons "error: cases exhausted" ())) ())))) (cons if (cons Select7022 (cons Select7020 (cons (shen.process-cases (cons cases Select7021)) ()))))))) (thaw GoTo7019)))))) (thaw GoTo7016)) (thaw GoTo7016))) (thaw GoTo7016))))
 
-(defun shen-<macrorule> (V545)
- (let Result
-  (let Parse_<patterns> (shen-<patterns> V545)
-   (if (not (= (fail) Parse_<patterns>))
-    (if
-     (and (cons? (fst Parse_<patterns>)) (= -> (hd (fst Parse_<patterns>))))
-     (let Parse_<macroaction>
-      (shen-<macroaction>
-       (shen-reassemble (tl (fst Parse_<patterns>)) (snd Parse_<patterns>)))
-      (if (not (= (fail) Parse_<macroaction>))
-       (if
-        (and (cons? (fst Parse_<macroaction>))
-         (= where (hd (fst Parse_<macroaction>))))
-        (let Parse_<guard>
-         (shen-<guard>
-          (shen-reassemble (tl (fst Parse_<macroaction>))
-           (snd Parse_<macroaction>)))
-         (if (not (= (fail) Parse_<guard>))
-          (shen-reassemble (fst Parse_<guard>)
-           (append (snd Parse_<patterns>)
-            (cons ->
-             (append (snd Parse_<macroaction>)
-              (cons where (snd Parse_<guard>))))))
-          (fail)))
-        (fail))
-       (fail)))
-     (fail))
-    (fail)))
-  (if (= Result (fail))
-   (let Result
-    (let Parse_<patterns> (shen-<patterns> V545)
-     (if (not (= (fail) Parse_<patterns>))
-      (if
-       (and (cons? (fst Parse_<patterns>))
-        (= -> (hd (fst Parse_<patterns>))))
-       (let Parse_<macroaction>
-        (shen-<macroaction>
-         (shen-reassemble (tl (fst Parse_<patterns>)) (snd Parse_<patterns>)))
-        (if (not (= (fail) Parse_<macroaction>))
-         (shen-reassemble (fst Parse_<macroaction>)
-          (append (snd Parse_<patterns>) (cons -> (snd Parse_<macroaction>))))
-         (fail)))
-       (fail))
-      (fail)))
-    (if (= Result (fail))
-     (let Result
-      (let Parse_<patterns> (shen-<patterns> V545)
-       (if (not (= (fail) Parse_<patterns>))
-        (if
-         (and (cons? (fst Parse_<patterns>))
-          (= <- (hd (fst Parse_<patterns>))))
-         (let Parse_<macroaction>
-          (shen-<macroaction>
-           (shen-reassemble (tl (fst Parse_<patterns>))
-            (snd Parse_<patterns>)))
-          (if (not (= (fail) Parse_<macroaction>))
-           (if
-            (and (cons? (fst Parse_<macroaction>))
-             (= where (hd (fst Parse_<macroaction>))))
-            (let Parse_<guard>
-             (shen-<guard>
-              (shen-reassemble (tl (fst Parse_<macroaction>))
-               (snd Parse_<macroaction>)))
-             (if (not (= (fail) Parse_<guard>))
-              (shen-reassemble (fst Parse_<guard>)
-               (append (snd Parse_<patterns>)
-                (cons <-
-                 (append (snd Parse_<macroaction>)
-                  (cons where (snd Parse_<guard>))))))
-              (fail)))
-            (fail))
-           (fail)))
-         (fail))
-        (fail)))
-      (if (= Result (fail))
-       (let Result
-        (let Parse_<patterns> (shen-<patterns> V545)
-         (if (not (= (fail) Parse_<patterns>))
-          (if
-           (and (cons? (fst Parse_<patterns>))
-            (= <- (hd (fst Parse_<patterns>))))
-           (let Parse_<macroaction>
-            (shen-<macroaction>
-             (shen-reassemble (tl (fst Parse_<patterns>))
-              (snd Parse_<patterns>)))
-            (if (not (= (fail) Parse_<macroaction>))
-             (shen-reassemble (fst Parse_<macroaction>)
-              (append (snd Parse_<patterns>)
-               (cons <- (snd Parse_<macroaction>))))
-             (fail)))
-           (fail))
-          (fail)))
-        (if (= Result (fail)) (fail) Result))
-       Result))
-     Result))
-   Result)))
+(defun shen.process-time (V7025) (cons let (cons Start (cons (cons get-time (cons run ())) (cons Result (cons V7025 (cons Finish (cons (cons get-time (cons run ())) (cons Time (cons (cons - (cons Finish (cons Start ()))) (cons Message (cons (cons pr (cons (cons cn (cons "
+run time: " (cons (cons cn (cons (cons str (cons Time ())) (cons " secs
+" ()))) ()))) (cons (cons stoutput ()) ()))) (cons Result ())))))))))))))
 
-(defun shen-<macroaction> (V546)
- (let Result
-  (let Parse_<action> (shen-<action> V546)
-   (if (not (= (fail) Parse_<action>))
-    (shen-reassemble (fst Parse_<action>)
-     (cons
-      (cons shen-walk
-       (cons (cons function (cons macroexpand ()))
-        (cons (snd Parse_<action>) ())))
-      ()))
-    (fail)))
-  (if (= Result (fail)) (fail) Result)))
+(defun shen.process-assoc (V7026) (if (and (cons? V7026) (and (cons? (tl V7026)) (and (cons? (tl (tl V7026))) (cons? (tl (tl (tl V7026))))))) (cons (hd V7026) (cons (hd (tl V7026)) (cons (cons (hd V7026) (tl (tl V7026))) ()))) V7026))
 
-(defun shen-@s-macro (V547)
- (cond
-  ((and (cons? V547)
-    (and (= @s (hd V547))
-     (and (cons? (tl V547))
-      (and (cons? (tl (tl V547))) (cons? (tl (tl (tl V547))))))))
-   (cons @s
-    (cons (hd (tl V547)) (cons (shen-@s-macro (cons @s (tl (tl V547)))) ()))))
-  ((and (cons? V547)
-    (and (= @s (hd V547))
-     (and (cons? (tl V547))
-      (and (cons? (tl (tl V547)))
-       (and (= () (tl (tl (tl V547)))) (string? (hd (tl V547))))))))
-   (let E (explode (hd (tl V547)))
-    (if (> (length E) 1) (shen-@s-macro (cons @s (append E (tl (tl V547)))))
-     V547)))
-  (true V547)))
+(defun shen.make-uppercase (V7027) (intern (shen.mu-h (str V7027))))
 
-(defun shen-synonyms-macro (V548)
- (cond
-  ((and (cons? V548) (= synonyms (hd V548)))
-   (cons shen-synonyms-help (cons (shen-rcons_form (tl V548)) ())))
-  (true V548)))
+(defun shen.mu-h (V7028) (if (= "" V7028) "" (if (shen.+string? V7028) (let W7029 (string->n (hdstr V7028)) (let W7030 (- W7029 32) (let W7031 (if (and (>= W7029 97) (<= W7029 122)) (n->string W7030) (hdstr V7028)) (@s W7031 (shen.mu-h (tlstr V7028)))))) (shen.f-error shen.mu-h))))
 
-(defun shen-nl-macro (V549)
- (cond
-  ((and (cons? V549) (and (= nl (hd V549)) (= () (tl V549))))
-   (cons nl (cons 1 ())))
-  (true V549)))
+(defun shen.record-macro (V7032 V7033) (set *macros* (shen.update-assoc V7032 V7033 (value *macros*))))
 
-(defun shen-vector-macro (V550)
- (cond ((= <> V550) (cons vector (cons 0 ()))) (true V550)))
+(defun shen.update-assoc (V7043 V7044 V7045) (if (= () V7045) (cons (cons V7043 V7044) ()) (let GoTo7046 (freeze (simple-error "implementation error in shen.update-assoc")) (if (cons? V7045) (let Select7047 (hd V7045) (let Select7048 (tl V7045) (if (and (cons? Select7047) (= V7043 (hd Select7047))) (cons (cons (hd Select7047) V7044) Select7048) (cons Select7047 (shen.update-assoc V7043 V7044 Select7048))))) (thaw GoTo7046)))))
 
-(defun shen-yacc-macro (V551)
- (cond
-  ((and (cons? V551) (and (= defcc (hd V551)) (cons? (tl V551))))
-   (shen-yacc->shen (hd (tl V551)) (tl (tl V551))
-    (shen-extract-segvars (tl (tl V551)))))
-  (true V551)))
+(defun shen.process-read-byte () (if (shen.char-stinput? (stinput)) (cons string->n (cons (cons shen.read-unit-string (cons (cons stinput ()) ())) ())) (cons read-byte (cons (cons stinput ()) ()))))
 
-(defun shen-assoc-macro (V552)
- (cond
-  ((and (cons? V552)
-    (and (cons? (tl V552))
-     (and (cons? (tl (tl V552)))
-      (and (cons? (tl (tl (tl V552))))
-       (element? (hd V552)
-        (cons @p
-         (cons @v
-          (cons append
-           (cons and (cons or (cons + (cons * (cons do ())))))))))))))
-   (cons (hd V552)
-    (cons (hd (tl V552))
-     (cons (shen-assoc-macro (cons (hd V552) (tl (tl V552)))) ()))))
-  (true V552)))
+(defun shen.call-prolog (V7049) (let W7050 (cons shen.prolog-vector ()) (let W7051 (cons @v (cons true (cons 0 (cons (cons vector (cons 0 ())) ())))) (let W7052 0 (let W7053 (cons freeze (cons true ())) (let W7054 (compile (lambda Z7055 (shen.<body> Z7055)) V7049) (let W7056 (shen.received V7049) (let W7057 (gensym V) (let W7058 (gensym L) (let W7059 (gensym K) (let W7060 (gensym C) (let W7061 (cons lambda (cons W7057 (cons (cons lambda (cons W7058 (cons (cons lambda (cons W7059 (cons (cons lambda (cons W7060 (cons (shen.continue W7056 W7054 W7057 W7058 W7059 W7060) ()))) ()))) ()))) ()))) (cons W7061 (cons W7050 (cons W7051 (cons W7052 (cons W7053 ())))))))))))))))))
 
-(defun shen-let-macro (V553)
- (cond
-  ((and (cons? V553)
-    (and (= let (hd V553))
-     (and (cons? (tl V553))
-      (and (cons? (tl (tl V553)))
-       (and (cons? (tl (tl (tl V553)))) (cons? (tl (tl (tl (tl V553))))))))))
-   (cons let
-    (cons (hd (tl V553))
-     (cons (hd (tl (tl V553)))
-      (cons (shen-let-macro (cons let (tl (tl (tl V553))))) ())))))
-  (true V553)))
+(defun shen.received (V7064) (let GoTo7065 (freeze ()) (if (cons? V7064) (let Select7066 (hd V7064) (let Select7067 (tl V7064) (if (and (= receive Select7066) (and (cons? Select7067) (= () (tl Select7067)))) Select7067 (union (shen.received Select7066) (shen.received Select7067))))) (thaw GoTo7065))))
 
-(defun shen-abs-macro (V554)
- (cond
-  ((and (cons? V554)
-    (and (= /. (hd V554))
-     (and (cons? (tl V554))
-      (and (cons? (tl (tl V554))) (cons? (tl (tl (tl V554))))))))
-   (cons lambda
-    (cons (hd (tl V554))
-     (cons (shen-abs-macro (cons /. (tl (tl V554)))) ()))))
-  ((and (cons? V554)
-    (and (= /. (hd V554))
-     (and (cons? (tl V554))
-      (and (cons? (tl (tl V554))) (= () (tl (tl (tl V554))))))))
-   (cons lambda (tl V554)))
-  (true V554)))
+(defun shen.prolog-vector () (let W7068 (absvector (value shen.*prolog-memory*)) (let W7069 (address-> W7068 0 shen.print-prolog-vector) (let W7070 (address-> W7068 1 2) W7070))))
 
-(defun shen-cases-macro (V557)
- (cond
-  ((and (cons? V557)
-    (and (= cases (hd V557))
-     (and (cons? (tl V557))
-      (and (= true (hd (tl V557))) (cons? (tl (tl V557)))))))
-   (hd (tl (tl V557))))
-  ((and (cons? V557)
-    (and (= cases (hd V557))
-     (and (cons? (tl V557))
-      (and (cons? (tl (tl V557))) (= () (tl (tl (tl V557))))))))
-   (cons if
-    (cons (hd (tl V557))
-     (cons (hd (tl (tl V557)))
-      (cons (shen-i/o-macro (cons error (cons "error: cases exhausted~%" ())))
-       ())))))
-  ((and (cons? V557)
-    (and (= cases (hd V557))
-     (and (cons? (tl V557)) (cons? (tl (tl V557))))))
-   (cons if
-    (cons (hd (tl V557))
-     (cons (hd (tl (tl V557)))
-      (cons (shen-cases-macro (cons cases (tl (tl (tl V557))))) ())))))
-  ((and (cons? V557)
-    (and (= cases (hd V557))
-     (and (cons? (tl V557)) (= () (tl (tl V557))))))
-   (interror "error: odd number of case elements~%" ()))
-  (true V557)))
+(defun receive (V7071) V7071)
 
-(defun shen-timer-macro (V558)
- (cond
-  ((and (cons? V558)
-    (and (= time (hd V558))
-     (and (cons? (tl V558)) (= () (tl (tl V558))))))
-   (shen-let-macro
-    (cons let
-     (cons Start
-      (cons (cons get-time (cons run ()))
-       (cons Result
-        (cons (hd (tl V558))
-         (cons Finish
-          (cons (cons get-time (cons run ()))
-           (cons Time
-            (cons (cons - (cons Finish (cons Start ())))
-             (cons Message
-              (cons
-               (shen-i/o-macro
-                (cons output (cons "~%run time: ~A secs~%" (cons Time ()))))
-               (cons Result ()))))))))))))))
-  (true V558)))
+(defun shen.rcons_form (V7072) (if (cons? V7072) (cons cons (cons (shen.rcons_form (hd V7072)) (cons (shen.rcons_form (tl V7072)) ()))) V7072))
 
-(defun shen-i/o-macro (V559)
- (cond
-  ((and (cons? V559) (and (= output (hd V559)) (cons? (tl V559))))
-   (cons intoutput
-    (cons (hd (tl V559)) (cons (shen-tuple-up (tl (tl V559))) ()))))
-  ((and (cons? V559) (and (= make-string (hd V559)) (cons? (tl V559))))
-   (cons intmake-string
-    (cons (hd (tl V559)) (cons (shen-tuple-up (tl (tl V559))) ()))))
-  ((and (cons? V559) (and (= error (hd V559)) (cons? (tl V559))))
-   (cons interror
-    (cons (hd (tl V559)) (cons (shen-tuple-up (tl (tl V559))) ()))))
-  ((and (cons? V559)
-    (and (= pr (hd V559))
-     (and (cons? (tl V559)) (= () (tl (tl V559))))))
-   (cons pr
-    (cons (hd (tl V559)) (cons (cons shen-stoutput (cons 0 ())) ()))))
-  ((and (cons? V559) (and (= read-byte (hd V559)) (= () (tl V559))))
-   (cons read-byte (cons (cons stinput (cons 0 ())) ())))
-  (true V559)))
+(defun shen.tuple-up (V7073) (if (cons? V7073) (cons @p (cons (hd V7073) (cons (shen.tuple-up (tl V7073)) ()))) V7073))
 
-(defun shen-tuple-up (V560)
- (cond
-  ((cons? V560)
-   (cons @p (cons (hd V560) (cons (shen-tuple-up (tl V560)) ()))))
-  (true V560)))
+(defun undefmacro (V7074) (do (set *macros* (remove (assoc V7074 (value *macros*)) (value *macros*))) V7074))
 
-(defun shen-put/get-macro (V561)
- (cond
-  ((and (cons? V561)
-    (and (= put (hd V561))
-     (and (cons? (tl V561))
-      (and (cons? (tl (tl V561)))
-       (and (cons? (tl (tl (tl V561))))
-        (= () (tl (tl (tl (tl V561))))))))))
-   (cons put
-    (cons (hd (tl V561))
-     (cons (hd (tl (tl V561)))
-      (cons (hd (tl (tl (tl V561))))
-       (cons (cons value (cons shen-*property-vector* ())) ()))))))
-  ((and (cons? V561)
-    (and (= get (hd V561))
-     (and (cons? (tl V561))
-      (and (cons? (tl (tl V561))) (= () (tl (tl (tl V561))))))))
-   (cons get
-    (cons (hd (tl V561))
-     (cons (hd (tl (tl V561)))
-      (cons (cons value (cons shen-*property-vector* ())) ())))))
-  (true V561)))
-
-(defun shen-function-macro (V562)
- (cond
-  ((and (cons? V562)
-    (and (= function (hd V562))
-     (and (cons? (tl V562)) (= () (tl (tl V562))))))
-   (shen-function-abstraction (hd (tl V562)) (arity (hd (tl V562)))))
-  (true V562)))
-
-(defun shen-function-abstraction (V563 V564)
- (cond ((= 0 V564) (cons freeze (cons V563 ()))) ((= -1 V564) V563)
-  (true (shen-function-abstraction-help V563 V564 ()))))
-
-(defun shen-function-abstraction-help (V565 V566 V567)
- (cond ((= 0 V566) (cons V565 V567))
-  (true
-   (let X (gensym V)
-    (cons /.
-     (cons X
-      (cons
-       (shen-function-abstraction-help V565 (- V566 1)
-        (append V567 (cons X ())))
-       ())))))))
-
-(defun undefmacro (F) (do (set *macros* (remove F (value *macros*))) F))

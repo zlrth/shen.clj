@@ -1,66 +1,146 @@
-(define print 
-  X -> (do (pr (ms-h ["~" "S"] (@p X skip)) (stoutput 0)) X))
+\\           Copyright (c) 2010-2019, Mark Tarver
 
-(define intoutput
-  String Args -> (pr (ms-h (explode-string String) Args) (stoutput 0)))
+\\                  All rights reserved.
 
-(define interror
-  String Args -> (simple-error (ms-h (explode-string String) Args))) 
+(package shen []
 
-(define intmake-string
-  String Args -> (ms-h (explode-string String) Args)) 
+(define print
+  X -> (let String (insert X "~S")
+            Print (pr String (stoutput))
+            X))
 
-(define ms-h
-  [] _ -> ""
-  ["~" "%" | Cs] Args -> (cn (n->string 10) (ms-h Cs Args))                       
-  ["~" C | Cs] (@p Arg Args) -> (cn (ob->str C Arg) (ms-h Cs Args))
-                                       where (element? C ["A" "S" "R"])
-  [C | Cs] Args -> (cn C (ms-h Cs Args)))
+(define pr
+  String Stream -> (cases (value *hush*) String
+                          (char-stoutput? Stream) (write-string String Stream)
+                          true (write-chars String Stream (string->byte String 0) 1)))
 
-(define ob->str
-  _ X -> "..."   where (= X (fail))
-  C [] -> (if (= C "R") "()" "[]")
-  C V ->  "<>"	where (= V (vector 0))
-  C [X | Y] -> (cn-all (append (if (= C "R") ["("] ["["]) 
-                                 [(ob->str C X)]  
-                                 (xmapcan (value *maximum-print-sequence-size*)  
-                                          (/. Z [" " (ob->str C Z)]) Y) 
-                                 (if (= C "R") [")"] ["]"]) ))
-  C X -> (let L (vector->list X 1)
-              E (tlstr (cn-all (xmapcan (- (value *maximum-print-sequence-size*) 1)
-                                        (/. Z [" " (ob->str C Z)]) L)))
-              V (cn "<" (cn E ">"))
-              V)   				where (vector? X)
-  C X -> (trap-error (ob->str "A" ((<-address X 0) X))
-                     (/. Ignore (let L (vector->list X 0)
-                                     E (tlstr (cn-all 
-                                        (xmapcan 
-                                         (- (value *maximum-print-sequence-size*) 1) 
-                                           (/. Z [" " (ob->str C Z)]) L)))
-                                     V (cn "<" (cn E ">"))
-                                     V)))  where (and (not (string? X)) (absvector? X)) 
-  C X -> (if (and (= C "A") (string? X))
-              X
-              (str X)))
+(define string->byte
+  String N -> (trap-error (string->n (pos String N)) (/. E eos)))
+
+(define write-chars
+  String Stream eos N -> String
+  String Stream Byte N -> (write-chars String
+                                       Stream
+                                       (do (write-byte Byte Stream) (string->byte String N))
+                                       (+ N 1)))
+
+(define mkstr
+  String Args -> (mkstr-l (proc-nl String) Args)   where (string? String)
+  String Args -> (mkstr-r [proc-nl String] Args))
+
+(define mkstr-l
+  String [] -> String
+  String [Arg | Args] -> (mkstr-l (insert-l Arg String) Args)
+  _ _ -> (simple-error "implementation error in shen.mkstr-l"))
+
+(define insert-l
+  _ "" -> ""
+  Arg (@s "~A" S) -> [app Arg S a]
+  Arg (@s "~R" S) -> [app Arg S r]
+  Arg (@s "~S" S) -> [app Arg S s]
+  Arg (@s S Ss) -> (factor-cn [cn S (insert-l Arg Ss)])
+  Arg [cn S Ss] -> [cn S (insert-l Arg Ss)]
+  Arg [app S Ss Mode] -> [app S (insert-l Arg Ss) Mode]
+  _ _ -> (simple-error "implementation error in shen.insert-l"))
+
+(define factor-cn
+  [cn S1 [cn S2 S3]] -> [cn (cn S1 S2) S3]  where (and (string? S1) (string? S2))
+  Cn -> Cn)
+
+(define proc-nl
+ "" -> ""
+ (@s "~%" Ss) -> (cn (n->string 10) (proc-nl Ss))
+ (@s S Ss) -> (cn S (proc-nl Ss))
+ _ -> (simple-error "implementation error in shen.proc-nl"))
+
+(define mkstr-r
+  String [] -> String
+  String [Arg | Args] -> (mkstr-r [insert Arg String] Args)
+  _ _ -> (simple-error "implementation error in shen.mkstr-r"))
+
+(define insert
+  Arg String -> (insert-h Arg String ""))
+
+(define insert-h
+  _ "" String -> String
+  Arg (@s "~A" S) String -> (cn String (app Arg S a))
+  Arg (@s "~R" S) String -> (cn String (app Arg S r))
+  Arg (@s "~S" S) String -> (cn String (app Arg S s))
+  Arg (@s S Ss) String -> (insert-h Arg Ss (cn String S))
+  _ _ _ -> (simple-error "implementation error in shen.insert-h"))
+
+(define app
+  Arg String Mode -> (cn (arg->str Arg Mode) String))
+
+(define arg->str
+  F _ -> "..."	   		  where  (= F (fail))
+  L Mode -> (list->str L Mode)    where (list? L)
+  S Mode -> (str->str S Mode)  	  where (string? S)
+  V Mode -> (vector->str V Mode)  where (absvector? V)
+  At _ -> (atom->str At))
+
+(define list->str
+  L r -> (@s "(" (iter-list L r (maxseq)) ")")
+  L Mode -> (@s "[" (iter-list L Mode (maxseq)) "]"))
+
+(define maxseq
+  -> (value *maximum-print-sequence-size*))
+
+(define iter-list
+  [] _ _ -> ""
+  _ _ 0 -> "... etc"
+  [X] Mode _ -> (arg->str X Mode)
+  [X | Y] Mode N -> (@s (arg->str X Mode) " " (iter-list Y Mode (- N 1)))
+  X Mode N -> (@s "| " (arg->str X Mode)))
+
+(define str->str
+  S a -> S
+  S _ -> (@s (n->string 34) S (n->string 34)))
+
+(define vector->str
+  V Mode -> (cases (print-vector? V) ((fn (<-address V 0)) V)
+                   (vector? V) (@s "<" (iter-vector V 1 Mode (maxseq)) ">")
+                   true (@s "<<" (iter-vector V 0 Mode (maxseq)) ">>")))
+
+(set *empty-absvector* (absvector 0))
+
+(define empty-absvector?
+  X -> (= X (value *empty-absvector*)))
+
+(define print-vector?
+  P -> (and (not (empty-absvector? P))
+            (let First (<-address P 0)
+              (or (= First tuple)
+                  (= First pvar)
+                  (= First dictionary)
+                  (and (not (number? First)) (fbound? First))))))
+
+(define fbound?
+  F -> (not (= (arity F) -1)))
 
 (define tuple
-  X -> (make-string "(@p ~S ~S)" (fst X) (snd X)))              
-              
-(define cn-all
-  [] -> ""
-  [X | Y] -> (cn X (cn-all Y)))
+  P -> (make-string "(@p ~S ~S)" (<-address P 1) (<-address P 2)))
 
-(define xmapcan
-  _ _ [] -> []
-  0 _ _ -> ["... etc"]
-  Max F [X | Y] -> (append (F X) (xmapcan (- Max 1) F Y))
-  _ F X -> [" |" | (F X)])
+(define dictionary
+  D -> (make-string "(dict ...)"))
 
-(define vector->list
-  X N -> (vector->listh X N []))
+(define iter-vector
+  _ _ _ 0 -> "... etc"
+  V N Mode Max -> (let Item (trap-error (<-address V N) (/. E out-of-bounds))
+                       Next (trap-error (<-address V (+ N 1)) (/. E out-of-bounds))
+                    (cases (= Item out-of-bounds) ""
+                           (= Next out-of-bounds) (arg->str Item Mode)
+                           true (@s (arg->str Item Mode)
+                                    " "
+                                    (iter-vector V (+ N 1) Mode (- Max 1))))))
 
-(define vector->listh
-  X N L -> (let Y (trap-error (<-address X N) (/. E out-of-range))
-              (if (= Y out-of-range)
-                  (reverse L)
-                  (vector->listh X (+ N 1) [Y | L]))))
+(define atom->str
+  At -> (trap-error (str At) (/. E (funexstring))))
+
+(define funexstring
+  -> (@s "c#16;fune" (arg->str (gensym (intern "x")) a) "c#17;"))
+
+(define list?
+  X -> (or (empty? X) (cons? X)))
+
+)

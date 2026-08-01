@@ -21,7 +21,7 @@
 
 
 "testing defun, lambda & let"
-(defun f (x) (/. y (+ x y)))
+(defun f (X) (/. Y (+ X Y)))
 (test-is (= ((f 3) 2) 5))
 (test-is (= 10 (let x 5 (* 2 x))))
 
@@ -72,7 +72,7 @@
 "testing if"
 (test-is  (if true true false))
 (test-is  (if false false true))
-(test-is (= (trap-error (if 5 true true) (/. _ -1)) -1))
+(test-is (= (trap-error (if 5 true true) (/. E -1)) -1))
 
 "testing number?"
 (test-is (=  (number?  3) true))
@@ -108,7 +108,7 @@
 (test-is (= "bar" (str bar)))
 (test-is (= (string? 55) false))
 (test-is (= (tlstr "foobar") "oobar"))
-(test-is (= (trap-error (cn bla blub) (/. _ -1)) -1))
+(test-is (= (trap-error (cn bla blub) (/. E -1)) -1))
 (test-is (= (cn "foo" "bar") "foobar"))
 (test-is (= (pos "bar" 2) "r"))
 
@@ -129,10 +129,10 @@
 (address-> (value v) 2 5)
 (test-is (= (<-address (value v) 2) 5))
 
-"testing eval-without-macros, freeze & thaw"
-(test-is (= (shen-eval-without-macros (+ 4 5)) 9))
-(test-is (= (shen-eval-without-macros 4) (+ 2 2)))
-(test-is (= (shen-eval-without-macros hello) hello))
+"testing eval, freeze & thaw"
+(test-is (= (eval (+ 4 5)) 9))
+(test-is (= (eval 4) (+ 2 2)))
+(test-is (= (eval hello) hello))
 (test-is (= (= 4 (freeze (+ 2 2))) false))
 (test-is (= 4 (thaw (freeze (+ 2 2)))))
 
@@ -146,10 +146,10 @@
 
 "testing Streams"
 (set fileName (cn (str (get-time run)) ".txt"))
-(set writeFile (open file (value fileName) out))
+(set writeFile (open (value fileName) out))
 (pr "foobar" (value writeFile))
 (close (value writeFile))
-(set readFile (open file (value fileName) in))
+(set readFile (open (value fileName) in))
 (test-is (= 102 (read-byte (value readFile))))
 (test-is (= 111 (read-byte (value readFile))))
 (test-is (= (= 102 (read-byte (value readFile))) false))
@@ -222,8 +222,8 @@
 
 "Absvectors"
 (set x (absvector 100))
-(test-is (= (<-address (value x) 1) fail!))
-(test-is (= (<-address (value x) 99) fail!))
+(test-is (= (<-address (value x) 1) (fail)))
+(test-is (= (<-address (value x) 99) (fail)))
 (test-is (= (trap-error (<-address (value x) 100) (/. E -1)) -1))
 (address-> (value x) 10 100)
 (test-is (= (<-address (value x) 10) 100))
@@ -239,4 +239,4 @@
 (test-is (= ---5 -5.0))
 
 
-(intoutput "~%passed ... ~A~%failed ... ~A~%Passrate ... ~A %~%" (@p (value *passed*) (@p (value *failed*) (@p (/ (* 100 (value *passed*)) (+ (value *failed*) (value *passed*))) ()))))
+(output "~%passed ... ~A~%failed ... ~A~%Passrate ... ~A %~%" (value *passed*) (value *failed*) (/ (* 100 (value *passed*)) (+ (value *failed*) (value *passed*))))

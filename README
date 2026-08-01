@@ -1,18 +1,16 @@
 shen.clj
 
+Shen 41.2 running on Clojure.
+
 To run, execute:
 
-	java -jar shen.clj-0.1.6-standalone.jar
+	./bin/shen
 
-Windows:
+or, from a standalone jar:
 
-	shen-clj.bat
+	java -Xss16m -jar shen.clj-0.2.0-SNAPSHOT-standalone.jar
 
-Unix:
-
-	./shen.clj
-
+Requires a JDK and the Clojure CLI (https://clojure.org/guides/install_clojure).
 
 Written by Håkan Råberg (hakan.raberg@gmai.com), feedback welcome.
 https://github.com/hraberg/shen.clj
-

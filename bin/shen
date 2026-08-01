@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Starts the Shen REPL. Renders the kernel from KLambda on first run.
+set -e
+
+cd "$(dirname "$0")/.."
+
+jar=(target/shen.clj-*-standalone.jar)
+rlwrap=$(command -v rlwrap || true)
+
+if [ -e "${jar[0]}" ]; then
+	exec $rlwrap java -Xss16m $JAVA_OPTS -jar "${jar[0]}" "$@"
+else
+	exec $rlwrap clojure -J-Xss16m -M:repl "$@"
+fi

@@ -1,16 +1,15 @@
+/target
+/.cpcache
+/.clj-kondo/.cache
+/.lsp
 /pom.xml
 *.jar
 *.asc
 *.zip
 *.log
-/lib
-/classes
 /native
-/.lein-failures
-/checkouts
-/.lein-deps-sum
 /shen/platforms
 *~
-stale
 repl-port
-shen.clj-*
+# scratch files written by the stream tests in test/shen/primitives.shen
+/test/shen/[0-9]*.txt

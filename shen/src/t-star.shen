@@ -1,279 +1,290 @@
-(package shen- []
+\\           Copyright (c) 2010-2019, Mark Tarver
+
+\\                  All rights reserved.
+
+(package shen [&]
 
 (define typecheck
-  X A -> (let Curry (curry X) 
-              ProcessN (start-new-prolog-process)
-              Type (insert-prolog-variables (normalise-type (curry-type A)) ProcessN)
-              Continuation (freeze (return Type ProcessN void))
-              (t* [Curry : Type] [] ProcessN Continuation)))
-            
+  X A -> (let Vs (extract-vars A)
+              A* (rectify-type A)
+              Curried (curry X)
+              (prolog? (insert-prolog-variables (receive Vs) (receive A*) Out)
+                       (toplevel-forms (receive Curried) Out)
+                       (return Out))))
+
+(defprolog insert-prolog-variables
+  (- []) Out Out <--;
+  (- [V | Vs]) A* Out <-- (insert-prolog-variables Vs (subst X (0 V) (0 A*)) Out);)
+
+(defprolog toplevel-forms
+  (- [define F | X]) A  <-- (when (type-theory-enabled?)) ! (signal-def (value *spy*) F) (t* [define F | X] A);
+  X A                   <-- (system-S [X (intern ":") A] []);)
+
+(defprolog signal-def
+  (- false) _ <--;
+  (- true) F <-- (is ShowF (output "~%typechecking (fn ~A)~%" F));)
+
+(define rectify-type
+  A -> (demodulate (curry-type A)))
+
+(define demodulate
+  X -> (trap-error (let Demod (walk (/. Y (demod Y)) X)
+                       (if (= Demod X)
+                           X
+                           (demodulate Demod))) (/. E X)))
+
+(define curry-type
+  [A --> B --> | C] -> (curry-type [A --> [B --> | C]])
+  [[list A] ==> B] -> (curry-type [[list A] --> [str [list A] B]])
+  [A * B * | C] -> (curry-type [A * [B * | C]])
+  [X | Y] -> (map (/. Z (curry-type Z)) [X | Y])
+  X -> X)
+
 (define curry
-  [F | X] -> [F | (map (function curry) X)]   where (special? F)
-  [Def F | X] -> [Def F | X] where (extraspecial? Def)
+  [define F | X] -> [define F | X]
+  [type X A] -> [type (curry X) A]
+  [input+ A S] -> [input+ A (curry S)]
+  [F | X] -> [F | (map (/. Y (curry Y)) X)]   where (special? F)
+  [F | X] -> [F | X]   where (extraspecial? F)
   [F X Y | Z] -> (curry [[F X] Y | Z])
   [F X] -> [(curry F) (curry X)]
-  X -> X)  
+  X -> X)
 
 (define special?
   F -> (element? F (value *special*)))
 
 (define extraspecial?
   F -> (element? F (value *extraspecial*)))
-               
-(defprolog t* 
-          _ _ <-- (fwhen (maxinfexceeded?)) (bind Error (errormaxinfs));
-          (mode fail -) _ <-- ! (prolog-failure);
-          (mode [X : A] -) Hyp <-- (fwhen (type-theory-enabled?)) ! (th* X A Hyp);
-          P Hyp <-- (show P Hyp) (bind Datatypes (value *datatypes*)) (udefs* P Hyp Datatypes);) 
 
-(define type-theory-enabled?
-  -> (value *shen-type-theory-enabled?*)) 
+(defprolog system-S
+  _ _                 <-- (when (maxinfexceeded?));
+  (- [X Colon A]) Hyp <-- (when (= Colon (intern ":"))) (when (type-theory-enabled?)) ! (system-S-h X A Hyp);
+  P Hyp               <-- (when (value *spy*)) (show P Hyp);
+  P Hyp               <-- (search-user-datatypes P Hyp (value *datatypes*));)
 
-(define enable-type-theory
-  + -> (set *shen-type-theory-enabled?* true)
-  - -> (set *shen-type-theory-enabled?* false) 
-  _ -> (error "enable-type-theory expects a + or a -~%"))
-
-(define prolog-failure
-  _ _ -> false)                      
-
-(define maxinfexceeded?
-  -> (> (inferences skip) (value *maxinferences*)))
-
-(define errormaxinfs
-  -> (simple-error "maximum inferences exceeded~%"))
-  
-(defprolog udefs*
-   P Hyp (mode [D | _] -) <-- (call [D P Hyp]);
-   P Hyp (mode [_ | Ds] -) <-- (udefs* P Hyp Ds);)   
-                                                     
-(defprolog th*
-  X A Hyps <-- (show [X : A] Hyps) (when false);
-  X A _ <-- (fwhen (typedf? X)) (bind F (sigf X)) (call [F A]);
-  X A _ <-- (base X A);
-  X A Hyp <-- (by_hypothesis X A Hyp);
-  (mode [F] -) A Hyp <-- (th* F [--> A] Hyp);
-  (mode [F X] -) A Hyp <-- (th* F [B --> A] Hyp) (th* X B Hyp);
-  (mode [cons X Y] -) [list A] Hyp <-- (th* X A Hyp) (th* Y [list A] Hyp);
-  (mode [@p X Y] -) [A * B] Hyp <-- (th* X A Hyp) (th* Y B Hyp);
-  (mode [@v X Y] -) [vector A] Hyp <-- (th* X A Hyp) (th* Y [vector A] Hyp);
-  (mode [@s X Y] -) string Hyp <-- (th* X string Hyp) (th* Y string Hyp);
-  (mode [lambda X Y] -) [A --> B] Hyp <-- ! 
-                                           (bind X&& (placeholder)) 
-                                           (bind Z (ebr X&& X Y))
-                                           (th* Z B [[X&& : A] | Hyp]); 
-  (mode [let X Y Z] -) A Hyp <-- ! (th* Y B Hyp) 
-                                    (bind X&& (placeholder))
-                                    (bind W (ebr X&& X Z))
-                                    (th* W A [[X&& : B] | Hyp]);                                        
-  (mode [open file FileName Direction] -) [stream Direction] Hyp 
-   <-- ! (th* FileName string Hyp);
-  (mode [type X A] -) B Hyp <-- ! (unify A B) (th* X A Hyp);
-  (mode [input+ : A] -) B Hyp <-- (bind C (normalise-type A)) (unify B C);
-  (mode [where P X] -) A Hyp <-- ! (th* P boolean Hyp) ! (th* X A [[P : verified] | Hyp]);
-  (mode [set Var Val] -) A Hyp <-- ! (th* [value Var] A Hyp) (th* Val A Hyp);
-  (mode [fail] -) symbol _ <--;
-   X A Hyp <-- (t*-hyps Hyp NewHyp) (th* X A NewHyp);
-  (mode [define F | X] -) A Hyp <-- ! (t*-def [define F | X] A Hyp);
-  (mode [process-datatype | _] -) symbol _ <--;
-  (mode [synonyms-help | _] -) symbol _ <--;
-  X A Hyp <-- (bind Datatypes (value *datatypes*))  (udefs* [X : A] Hyp Datatypes);) 
- 
-(defprolog t*-hyps
-    (mode [[[cons X Y] : (mode [list A] +)] | Hyp] -) Out <-- (bind Out [[X : A] [Y : [list A]] | Hyp]);
-    (mode [[[@p X Y] : (mode [A * B] +)] | Hyp] -) Out <-- (bind Out [[X : A] [Y : B] | Hyp]);
-    (mode [[[@v X Y] : (mode [vector A] +)] | Hyp] -) Out <-- (bind Out [[X : A] [Y : [vector A]] | Hyp]); 
-    (mode [[[@s X Y] : (mode string +)] | Hyp] -) Out <-- (bind Out [[X : string] [Y : string] | Hyp]);
-    (mode [X | Hyp] -) Out <-- (bind Out [X | NewHyps]) (t*-hyps Hyp NewHyps);) 
-             
 (define show
-  P Hyps ProcessN Continuation 
+  P Hyps Bindings _ _ _
    -> (do (line)
-          (show-p (deref P ProcessN))
-          (nl)
-          (nl)
-          (show-assumptions (deref Hyps ProcessN) 1)
-          (output "~%> ") 
-          (pause-for-user (value *language*))
-          (thaw Continuation))   where (value *spy*)
-   _ _ _ Continuation -> (thaw Continuation))
+          (show-p (deref P Bindings))
+          (nl 2)
+          (show-assumptions (deref Hyps Bindings) 1)
+          (pause-for-user)
+          false))
 
 (define line
-  -> (let Infs (inferences _)
-       (output "____________________________________________________________ ~A inference~A ~%?- " 
+  -> (let Infs (inferences)
+       (output "____________________________________________________________ ~A inference~A ~%?- "
                 Infs (if (= 1 Infs) "" "s"))))
-                             
-(define show-p 
-  [X : A] -> (output "~R : ~R" X A)
-  P -> (output "~R" P))
- 
-\* Enumerate assumptions. *\
+
+(define show-p
+  [X Colon A] -> (do (prterm X) (pr " : ") (output "~R" A))  where (= Colon (intern ":"))
+  P -> (prterm P))
+
+(define prterm
+  [cons X Y] -> (do (pr "[") (prterm X) (prtl Y) (pr "]"))
+  [F | X] -> (do (pr "(") (prterm F) (map (/. Y (do (pr " ") (prterm Y))) X) (pr ")"))
+  X -> (print X))
+
+(define prtl
+  [] -> ""
+  [cons X Y] -> (do (pr " ") (prterm X) (prtl Y))
+  X -> (do (pr " | ") (prterm X)))
+
 (define show-assumptions
-  [] _ -> skip
-  [X | Y] N -> (do (output "~A. " N) (show-p X) (nl) (show-assumptions Y (+ N 1))))
-  
-\* Have to parameterise to language because CL does not behave well with read-byte. :< *\
+  [] _ -> (output "~%> ")
+  [X | Y] N -> (do (output "~A. " N) (show-p X) (nl) (show-assumptions Y (+ N 1)))
+  _ _ -> (simple-error "implementation error in shen.show-assumptions"))
+
 (define pause-for-user
-  "Common Lisp" 
-   -> (let I (FORMAT [] "~C" (READ-CHAR)) (if (= I "a") (error "input aborted~%") (nl)))
-   _ -> (let I (read-char) (if (= I "a") (error "input aborted~%") (nl)))) 
+   -> (let Byte (read-byte (stinput))
+             (if (= Byte 94)
+                 (error "input aborted~%")
+                 (nl))))
 
-(define read-char
-  -> (read-char-h (read-byte) 0))
-  
-(define read-char-h
-  \* State 0; read until the stinput is empty - emptying any buffered bytes. *\
-  -1 0 -> (read-char-h (read-byte) 1)
-  _ 0 -> (read-char-h (read-byte) 0)
-  -1 1 -> (read-char-h (read-byte) 1)
-  \* State 1; read until the stinput is not empty - returning the byte as a string. *\
-  N 1 -> (n->string N))   
+(define type-theory-enabled?
+  -> (value *shen-type-theory-enabled?*))
 
-\* Does the function have a type? *\
-(define typedf?
-   F -> (element? F (value *signedfuncs*)))
+(define maxinfexceeded?
+  -> (if (> (inferences) (value *maxinferences*))
+         (simple-error "maximum inferences exceeded")
+         false))
 
-\* The name of the Horn clause containing the signature of F. *\
-(define sigf 
-  F -> (concat type-signature-of- F))  
-                                                     
-\* Generate a placeholder - a symbol which stands for an arbitrary object.  *\    
-(define placeholder
-  -> (gensym &&))                                                          
+(defprolog system-S-h
+  X A Hyp                         <-- (when (value *spy*)) (show [X (intern ":") A] Hyp);
+  X A _                           <-- (when (not (cons? (1 X)))) (primitive X A);
+  X A Hyp                         <-- (by-hypothesis X A Hyp);
+  (- [F]) A Hyp                   <-- (lookupsig F [--> A]);
+  (- [fn F]) A Hyp                <-- (when (= (arity F) 0)) ! (system-S-h [F] A Hyp);
+  (- [fn F]) A _                  <-- (lookupsig F A);
+  (- [F X]) A Hyp                 <-- (when (not (cons? (1 F)))) (lookupsig F [B --> A]) (system-S-h X B Hyp);
+  (- [F X]) A Hyp                 <-- (system-S-h F [B --> A] Hyp) (system-S-h X B Hyp);
+  (- [cons X Y]) [list A] Hyp     <-- (system-S-h X A Hyp) (system-S-h Y [list A] Hyp);
+  (- [@p X Y]) [A * B] Hyp        <-- (system-S-h X A Hyp) (system-S-h Y B Hyp);
+  (- [@v X Y]) [vector A] Hyp     <-- (system-S-h X A Hyp) (system-S-h Y [vector A] Hyp);
+  (- [@s X Y]) string Hyp         <-- (system-S-h X string Hyp) (system-S-h Y string Hyp);
+  (- [lambda X Y]) [A --> B] Hyp  <-- (bind New (freshterm (1 X)))
+                                         (bind Z (beta (1 X) New Y))
+                                         (system-S-h Z B [[New (intern ":") A] | Hyp]);
+  (- [let X Y Z]) A Hyp           <-- (system-S-h Y B Hyp)
+                                      (bind New (freshterm (1 X)))
+                                      (bind W (beta (1 X) (1 New) (1 Z)))
+                                      (system-S-h W A [[New (intern ":") B] | Hyp]);
+  (- [open File D]) [stream D] Hyp <-- (when (element? (1 D) [in out]))
+                                       (system-S-h File string Hyp);
+  (- [type X A]) B Hyp            <-- !  (is! (rectify-type A) B)
+                                         (system-S-h X B Hyp);
+  (- [input+ A Stream]) B Hyp     <--   (is! B (rectify-type A))
+                                        (system-S-h Stream [stream in] Hyp);
+  (- [set Var Val]) A Hyp         <--  (system-S-h Var symbol Hyp)
+                                       (system-S-h [value Var] A Hyp)
+                                         (system-S-h Val A Hyp);
+  X A Hyp                         <-- (l-rules Hyp Normalised false) ! (system-S-h X A Normalised);
+  X A Hyp                         <-- (search-user-datatypes [X (intern ":") A] Hyp (value *datatypes*));)
 
-\* base types *\              
+(defprolog primitive
+  X number        <-- (when (number? (1 X)));
+  X boolean       <-- (when (boolean? (1 X)));
+  X string        <-- (when (string? (1 X)));
+  X symbol        <-- (when (symbol? (1 X)));
+  (- []) [list A] <--;)
 
-(defprolog base
-  X number <-- (fwhen (number? X));
-  X boolean <-- (fwhen (boolean? X));
-  X string <-- (fwhen (string? X));
-  X symbol <-- (fwhen (symbol? X)) (fwhen (not (placeholder? X)));
-  (mode [] -) [list A] <--;)   
-            
-\* Recognisor for placeholders - symbols which stand for arbitrary objects. *\
-(define placeholder?
-   S -> (and (symbol? S) (placeholder-help? (str S))))
-   
-(define placeholder-help?
-   (@s "&&" _) -> true   
-   _ -> false)
+(defprolog by-hypothesis
+ X A (- [[Y Colon B] | _]) <-- (when (= Colon (intern ":"))) (when (= X Y)) (is! A B);
+ X A (- [_ | Hyp])         <-- (by-hypothesis X A Hyp);)
 
-\* Prove a conclusion from the hypothesis list. *\    
-           
-(defprolog by_hypothesis
- X A (mode [[Y : B] | _] -) <-- (identical X Y) (unify! A B);
- X A (mode [_ | Hyp] -) <-- (by_hypothesis X A Hyp);)                 
+(defprolog lookupsig
+  X A <-- (sigf (assoc (0 X) (value *sigf*)) A);)
 
-\* Establish the type of a function. *\
-      
-(defprolog t*-def
-  (mode [define F | X] -) A Hyp <-- (bind Sig+Rules (compile (function <sig+rules>) X []))
-                                     (bind Error (if (= Sig+Rules (fail))
-                                                     (errordef F)
-                                                     skip))
-                                     (bind Sig (hd Sig+Rules))
-                                     (bind Rules (tl Sig+Rules))
-                                     (bind Vars (extract_vars Sig))
-                                     (bind Sig&& (placeholders Sig Vars))
-                                     !
-                                     (t*-rules Rules Sig&& 1 F [[F : Sig&&] | Hyp])
-                                     (bind Declare (declare F Sig))
-                                     (unify! A Sig);)  
+(define sigf
+  [_ | Lambda] A Bindings Lock Key Continuation -> (Lambda A Bindings Lock Key Continuation)
+  _ _ _ _ _ _ -> false)
 
-\* Parse the def into its parts - a signature and the body of the definition. *\          
-(defcc <sig+rules>
-  <signature> <trules> := [<signature> | <trules>];) 
-  
-\* Replace the variables by place holders. *\
-(define placeholders
-  [X | Y] Vs -> (map (/. Z (placeholders Z Vs)) [X | Y])
-  X Vs -> (concat && X)        where (element? X Vs)
-  X _ -> X)    
+(define freshterm
+  X -> (let V (absvector 3)
+            V0 (address-> V 0 print-freshterm)
+            V1 (address-> V0 1 X)
+            V2 (address-> V1 2 (set *gensym* (+ 1 (value *gensym*))))
+            V2))
 
-(defcc <trules>
-  <trule> <trules> := [<trule> | <trules>];
-  <trule> := [<trule>];)
-  
-(defcc <trule>
-  <patterns> <arrow> <action> <guard?> 
-     := (let Vars (extract_vars <patterns>)
-             Patterns (placeholders <patterns> Vars) 
-             Action (placeholders (curry <action>) Vars)
-             Guard (placeholders (curry <guard?>) Vars)
-             (form-rule Patterns <arrow> Action Guard));)
+(define print-freshterm
+  V -> (cn "&&" (str (<-address V 1))))
 
-(define form-rule
-  Patterns forward Action Guard -> [Patterns (if (= Guard skip)
-                                                 Action
-                                                 [where Guard Action])]
-  Patterns backward [[fail-if F] X] Guard -> [Patterns (if (= Guard skip)
-                                                         [where [not [F X]] X]
-                                                         [where [[and Guard] [not [F X]]] X])]
-  Patterns backward Action Guard -> [Patterns (if (= Guard skip)
-                                                  [where [not [[== Action] [fail]]] Action]
-                                                  [where [[and Guard] [not [[== Action] [fail]]]] Action])])
-                                                  
-(defcc <guard?>
-  where <guard> := <guard>;
-  <e> := skip;)
-   
-(defcc <arrow>
-  -> := forward; 
-  <- := backward;)                                                       
-                         
-\* Error message if def does not parse. *\                                
-(define errordef
-  F -> (error "syntax error in ~A~%" F))
+(defprolog search-user-datatypes
+   P Hyp (- [[_ | Fn] | _]) <-- (call (Fn P Hyp));
+   P Hyp (- [_ | Ds]) <-- (search-user-datatypes P Hyp Ds);)
 
-\* Establish the type of the rules of a function *\
+(defprolog l-rules
+  (- []) Normalised (- true) <-- ! (bind Normalised []);
+  (- [[[cons X Y] Colon [list A]] | Hyp]) Normalised _
+	<-- (when (= Colon (intern ":"))) ! (l-rules [[X Colon A] [Y Colon [list A]] | Hyp] Normalised true);
+  (- [[[@p X Y] Colon [A * B]] | Hyp]) Normalised _
+	<-- (when (= Colon (intern ":"))) ! (l-rules [[X Colon A] [Y Colon B] | Hyp] Normalised true);
+  (- [[[@s X Y] Colon string] | Hyp]) Normalised _
+	<-- (when (= Colon (intern ":"))) ! (l-rules [[X Colon string] [Y Colon string] | Hyp] Normalised true);
+  (- [[[@v X Y] Colon [vector A]] | Hyp]) Normalised _
+	<-- (when (= Colon (intern ":"))) ! (l-rules [[X Colon A] [Y Colon [vector A]] | Hyp] Normalised true);
+  (- [P | Hyp]) [Q | Normalised] Flag?
+	<-- (bind Q P) (l-rules Hyp Normalised Flag?);)
+
+(defprolog t*
+  (- [define F | X]) A <-- !  (bind SigxRules (sigxrules [(0 F) | (0 X)]))
+                              (bind Sig (fst (1 SigxRules)))
+                              (bind Rules (snd (1 SigxRules)))
+                              (bind FreshSig (freshen-sig Sig))
+                              (t*-rules F Rules FreshSig 1)
+                              (is Sig A);)
+
+(define sigxrules
+  Def -> (compile (/. X (<sig*rules> X)) Def))
+
+(defcc <sig*rules>
+  F { <signature> } <rules*> := (let Rectified (rectify-type <signature>)
+                                     (@p Rectified <rules*>));)
+
+(define freshen-sig
+  Sig -> (let Vs (extract-vars Sig)
+              Assoc (map (/. V [V | (freshterm (concat & V))]) Vs)
+              (freshen-type Assoc Sig)))
+
+(define freshen-type
+  [] X -> X
+  [[V | Fresh] | Assoc] X -> (freshen-type Assoc (subst Fresh V X)))
+
+(defcc <rules*>
+  <rule*> <rules*> := [<rule*> | <rules*>];
+  <rule*> := [<rule*>];)
+
+(defcc <rule*>
+  <patterns> -> Action where Guard := (@p <patterns> [where Guard Action]);
+  <patterns> <- Action where Guard := (@p <patterns> (correct [where Guard Action]));
+  <patterns> <- Action             := (@p <patterns> (correct Action));
+  <patterns> -> Action             := (@p <patterns> Action);)
+
+(define correct
+  [where G [fail-if F R]] -> [where [and G [not [F R]]] R]
+  [where G R] -> [where [and G [not [= R [fail]]]] R]
+  [fail-if F R] -> [where [not [F R]] R]
+  R -> [where [not [= R [fail]]] R])
 
 (defprolog t*-rules
-  (mode [] -) _ _ _ _ <--;
-  (mode [Rule | Rules] -) A N F Hyp <-- (t*-rule Rule A N F Hyp) ! (bind M (+ N 1))  (t*-rules Rules A M F Hyp);) 
-                                                            
-\* Establish the type of a rule of a function *\
-            
+  _ (- []) _ _ <--;
+  F (- [Rule | Rules]) A Counter <-- (bind Fresh (freshen-rule Rule))
+                                     (t*-rule F Counter (fst (1 Fresh)) (snd (1 Fresh)) A)
+                                     !
+                                     (t*-rules F Rules A (+ (0 Counter) 1));)
+
+(define freshen-rule
+  (@p Patterns Action) -> (let Vs (extract-vars Patterns)
+                               Assoc (map (/. V [V | (freshterm V)]) Vs)
+                               (@p (freshen Assoc Patterns) (freshen Assoc Action))))
+
+(define freshen
+  [] X -> X
+  [[V | Fresh] | Assoc] X -> (freshen Assoc (beta V Fresh X)))
+
 (defprolog t*-rule
-   Rule A N F Hyp <-- (t*-ruleh Rule A Hyp);
-   _ _ N F _ <-- (bind Error (type-insecure-rule-error-message N F));)
-                                
-(defprolog t*-ruleh
-  (mode [[] Result] -) [--> A] Hyp <-- ! (th* Result A Hyp);
-  (mode [Patterns Result] -) A Hyp <-- (t*-patterns Patterns A NewHyp B)
-                                         !
-                                        (conc NewHyp Hyp AllHyp)
-                                        !
-                                        (th* Result B AllHyp);)                     
+  _ _ Ps R A <-- (t*-rule-h Ps R A);
+  F Counter _ _ _ <-- (bind Err (error "type error in rule ~A of ~A~%" (0 Counter) (0 F)));)
 
-(define type-insecure-rule-error-message
-  N F -> (error "type error in rule ~A of ~A~%" N F))  
+(defprolog t*-rule-h
+  (- []) R (- [--> A]) <-- ! (t*-correct R A []);
+  Ps R A 	             <-- (p-hyps (freshterms (0 Ps)) Hyps)
+                           (t*-integrity Ps A Hyps B)
+                           !
+                           (myassume Ps A Assumptions)
+                           (t*-correct R B Assumptions);)
 
-\* Establish that each pattern meets type constraints *\                    
-                         
-(defprolog t*-patterns
-  (mode [] -) B [] B <--;
-  (mode [Pattern | Patterns] -) (mode [A --> B] -) [[Pattern : A] | Hyp] C
-                      <-- (t*-assume Pattern Assume) !
-                           (th* Pattern A Assume) !
-                           (t*-patterns Patterns B Hyp C);) 
-                             
-\* Generate the assumptions for each pattern. *\                         
+(defprolog myassume
+  (- []) _ [] <--;
+  (- [P | Ps]) (- [A --> B]) [[P Colon A] | Assumptions] <-- (bind Colon (intern ":"))
+                                                             (myassume Ps B Assumptions);)
 
-(defprolog t*-assume
-   (mode [X | Y] -) Assume <-- ! (t*-assume X A1) (t*-assume Y A2) (bind Assume (append A1 A2));
-   X Out <-- (fwhen (placeholder? X)) (bind Out [[X : A]]);
-   _ [] <--;)
-   
-(defprolog conc
- (mode [] -) X Out <-- (bind Out X);
- (mode [X | Y] -) W Out <-- (bind Out [X | Z]) (conc Y W Z);)   
-  
-(defprolog findallhelp
-  Pattern Literal X A <-- (call Literal) (remember A Pattern) (when false);
-  _ _ X A <-- (bind X (value A));)
+(define freshterms
+  [] -> []
+  [[X | Y] | Z] -> (freshterms (append [X | Y] Z))
+  [X | Y] -> (adjoin X (freshterms Y))  where (freshterm? X)
+  [_ | Y] -> (freshterms Y))
 
-(defprolog remember
-  A Pattern <-- (is B (set A [Pattern | (value A)]));) )
-  
-(defprolog findall
-  Pattern Literal X <-- (bind A (gensym a)) (bind B (set A [])) (shen-findallhelp Pattern Literal X A);)                               
+(defprolog p-hyps
+  (- []) [] <--;
+  (- [P | Ps]) [[Q Colon A] | Hyps] <-- (bind Q P)
+                                        (bind Colon (intern ":"))
+                                        (p-hyps Ps Hyps);)
+
+(defprolog t*-correct
+  (- [where G R]) A Hyps <-- !
+                             (bind CurryG (curry (0 G)))
+                             (system-S-h CurryG boolean Hyps)
+                             !
+                             (t*-correct R A [[CurryG (intern ":") verified] | Hyps]);
+  R A Hyps               <-- (system-S-h (curry (0 R)) A Hyps);)
+
+(defprolog t*-integrity
+  (- []) B _ B                      <--;
+  (- [P | Ps]) (- [A --> B]) Hyps C <--  (system-S-h P A Hyps)
+                                         (t*-integrity Ps B Hyps C);)
+
+(define freshterm?
+  X -> (and (absvector? X) (not (string? X)) (= (<-address X 0) print-freshterm)))
+
+)

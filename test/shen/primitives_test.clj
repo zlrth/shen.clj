@@ -1,7 +1,8 @@
 (ns shen.primitives-test
   (:use [clojure.test]
         [shen.primitives :only (value 神)])
-  (:require [shen]
+  (:require [shen.install]
+            [shen]
             [clojure.java.io :as io]))
 
 ;; Dominik's test suite for the primitives from

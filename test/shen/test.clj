@@ -3,7 +3,10 @@
         [shen.primitives :only (value set shen-kl-to-clj λ 神 define defmacro defprolog prolog?
                                       reset-macros! package parse-shen parse-and-eval-shen)])
   (:refer-clojure :exclude [eval defmacro set for filter])
-  (:require [shen]))
+  ;; shen.install renders the kernel from KLambda if that hasn't happened yet,
+  ;; so it has to load before shen.
+  (:require [shen.install]
+            [shen]))
 
 (define super
   [Value Succ End] Action Combine Zero ->
@@ -25,17 +28,27 @@
          []))
 
 (deftest shenlanguage.org
+  ;; Shen 41 compiles an application whose head has no registered arity into a
+  ;; lambda-form lookup, and the port resolves namespace-qualified names from
+  ;; there -- which reaches Clojure functions but not Clojure macros, since a
+  ;; macro's var holds a two-extra-argument expander rather than the callable
+  ;; the lookup wants. So `for` is captured on the Clojure side here.
+  (is (= "0123456789"
+         (with-out-str (神 (for [0 (+ 1) (= 10)] print)))))
+
   (are [shen out] (= out (with-out-str (shen/print shen)))
 
+       ;; Shen calling a Clojure function.
        (神
-        (c/with-out-str
-          (for [0 (+ 1) (= 10)] print)))
-       "\"0123456789\""
+        (c/count "0123456789"))
+       "10"
 
        (神
         (filter [0 (+ 1) (= 100)]
                 (λ X (integer? (/ X 3)))))
-       "[0 3 6 9 12 15 18 21 24 27 30 33 36 39 42 45 48 51 54 57 60... etc]"
+       ;; shen.iter-list stops at *maximum-print-sequence-size* elements and
+       ;; appends "... etc"; Shen 8 used to run one element into the ellipsis.
+       "[0 3 6 9 12 15 18 21 24 27 30 33 36 39 42 45 48 51 54 57 ... etc]"
 
        ))
 
@@ -52,7 +65,9 @@
 
        (filter [0 (partial + 1) (partial = 100)]
                #(integer? (/ % 3)))
-       "[0 3 6 9 12 15 18 21 24 27 30 33 36 39 42 45 48 51 54 57 60... etc]"
+       ;; shen.iter-list stops at *maximum-print-sequence-size* elements and
+       ;; appends "... etc"; Shen 8 used to run one element into the ellipsis.
+       "[0 3 6 9 12 15 18 21 24 27 30 33 36 39 42 45 48 51 54 57 ... etc]"
 
        (prolog? (mem 1 [X | 2]) (return X))
        "1"
@@ -158,9 +173,11 @@
         (cons 1 (cons 2 3)))
        "[1 2 | 3]"
 
+       ;; A raw absvector is not a `vector?` -- slot 0 holds (fail) rather than
+       ;; a length -- so the printer renders it as a bare array.
        (神
         (absvector 1))
-       "<fail!>"
+       "<<...>>"
 
        (神
         (vector 1))
@@ -192,8 +209,9 @@
        "(filter [0 (+ 1) (= 100)] (/. X (integer? (/ X 3))))"
        seq?
 
+       ;; Shen 41 returns a printable stand-in for the function, not its name.
        "(defprolog f a <--;)"
-       'f
+       #(= "(fn f)" (with-out-str (shen/print %)))
 
        "(cond (true \"/\"))"
        "/"
@@ -248,10 +266,13 @@
 
        ))
 
+;; Shen 41 wants a genuine variable as the lambda parameter -- `_` is a pattern
+;; wildcard and shen.process-lambda rejects it -- and it rejects a bare `E` in a
+;; macro body as a free variable. (protect E) satisfies both.
 (use-fixtures :once (fn [suite]
                       (defmacro clj-exec-macro
-                        [clj-exec Expr] -> [trap-error [time Expr] [λ _ failed]])
-                      (parse-and-eval-shen "(defmacro parsed-exec-macro [parsed-exec Expr] -> [trap-error [time Expr] [/. _ failed]])")
+                        [clj-exec Expr] -> [trap-error [time Expr] [λ (protect E) failed]])
+                      (parse-and-eval-shen "(defmacro parsed-exec-macro [parsed-exec Expr] -> [trap-error [time Expr] [/. (protect E) failed]])")
 
                       (suite)
 
@@ -278,9 +299,8 @@
 
 (defn test-programs []
   (神
-   (cd "shen/test-programs")
-   (load "README.shen")
-   (load "tests.shen")))
+   (cd "shen/tests")
+   (load "runme.shen")))
 
 (defn -main []
   (test-programs))

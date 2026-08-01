@@ -1,0 +1,38 @@
+{;; target/generated holds the Clojure source rendered from the KLambda kernel.
+ ;; target/classes holds its AOT-compiled form, and shadows the source when present.
+ :paths ["src" "target/classes" "target/generated"]
+
+ :deps {org.clojure/clojure {:mvn/version "1.12.5"}}
+
+ :aliases
+ {;; The Shen REPL. Renders the kernel from KLambda on first run; use
+  ;; `clojure -T:build kl` to force a re-render after editing the kernel or
+  ;; the translator.
+
+  :repl {:jvm-opts ["-Xss16m"]
+         :main-opts ["-m" "shen.install"]}
+
+  ;; Shen's own test suite, from shen/test-programs.
+  :shen-test {:extra-paths ["test"]
+              :jvm-opts ["-Xss16m"]
+              :main-opts ["-m" "shen.test"]}
+
+  ;; The Shen benchmarks.
+  :benchmarks {:extra-paths ["test"]
+               :jvm-opts ["-Xss16m"]
+               :main-opts ["-m" "shen.benchmarks"]}
+
+  ;; Clojure-side unit tests. The regex is wider than the runner's default so
+  ;; that shen.test is picked up alongside shen.primitives-test.
+  :test {:extra-paths ["test"]
+         :jvm-opts ["-Xss16m"]
+         :extra-deps {io.github.cognitect-labs/test-runner
+                      {:git/tag "v0.5.1" :git/sha "dfb30dd"}}
+         :main-opts ["-m" "cognitect.test-runner" "-r" "shen\\..*test$"]
+         :exec-fn cognitect.test-runner.api/test
+         :exec-args {:patterns ["shen\\..*test$"]}}
+
+  ;; AOT compilation and jar building; see build.clj.
+  :build {:deps {io.github.clojure/tools.build {:mvn/version "0.10.14"}}
+          :jvm-opts ["-Xss16m"]
+          :ns-default build}}}

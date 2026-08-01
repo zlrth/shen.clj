@@ -70,8 +70,53 @@
   (for [p (map #(take % parameters) (range 1 (count parameters)))]
     `(~(vec p) (partial ~name ~@p))))
 
+;; Shen 41 puts almost all of its internals in the `shen` package, so kernel
+;; names look like `shen.walk` and `shen.*macros*`. Clojure will happily read
+;; and even `def` such a symbol, but it can never resolve one: at any use site
+;; the compiler sees the dot and tries to load a class instead. The dot has to
+;; go, and `/` is unwelcome for the same reason it always was.
+;;
+;; So names are held munged inside Clojure and unmunged in strings -- `intern`
+;; munges on the way in, `str` unmunges on the way out, which is what keeps
+;; round trips like Shen's `concat` (str, cn, intern) honest and keeps the
+;; printer showing `shen.walk` rather than the internal spelling.
+(def ^:private ^:const dot-escape "-dot-")
+(def ^:private ^:const slash-escape "-slash-")
+;; `_` is escaped for a subtler reason than the other two. It is a perfectly
+;; good Clojure symbol character, but AOT compilation names a function's class
+;; after the munged symbol, and Clojure's own munging maps `-` to `_`. So
+;; shen.initialise-environment and shen.initialise_environment -- distinct vars,
+;; both real kernel functions -- would compile to one class file, the second
+;; silently overwriting the first. Keeping `_` out of munged names makes that
+;; mapping invertible, and so collision-free. The failure is invisible until you
+;; AOT compile, where it presents as a function with the wrong body.
+(def ^:private ^:const underscore-escape "-underscore-")
+
+(defn ^:private munge-name [^String n]
+  ;; `/` is Shen's division and `/.` its lambda; both are legal Clojure symbols
+  ;; as they stand, and both are what the reader and printer expect to see.
+  (c/case n
+    "/" "/"
+    "/." "/."
+    (-> n
+        (s/replace "." dot-escape)
+        (s/replace "/" slash-escape)
+        (s/replace "_" underscore-escape))))
+
+(defn ^:private demunge-name [^String n]
+  (-> n
+      (s/replace dot-escape ".")
+      (s/replace slash-escape "/")
+      (s/replace underscore-escape "_")))
+
+(defn munge-symbol
+  "Rewrites a symbol read out of a KLambda file into one Clojure can resolve."
+  [sym]
+  (c/let [n (c/name sym)]
+    (if (re-find #"[./_]" n) (symbol (munge-name n)) sym)))
+
 (defn ^:private shen-internal-fn? [s]
-  (re-find #"shen-" (name s)))
+  (c/and (symbol? s) (re-find #"shen-dot-" (c/name s))))
 
 (defn ^:private may-cause-invalid-codesize? [s]
   (c/< 2000 (count (flatten s))))
@@ -133,21 +178,42 @@
   ([path] (partial recur? path))
   ([path fn]
      (c/or (= 'cond (last (drop-last path)))
-           (set/superset? '#{defun cond if do let}
+           ;; `if-kl`, not `if`: the translator renames `if` before the path is
+           ;; extended, so spelling it `if` here never matched anything. That
+           ;; left a self-call in the tail of an `(if ...)` body compiling to
+           ;; real recursion -- which only shows up once pattern factorisation
+           ;; is enabled, since that is what makes the compiler emit `if` bodies
+           ;; rather than `cond` ones.
+           (set/superset? '#{defun cond if-kl do let}
                           (c/set path)))))
 
 (declare set*)
 
-(defn ^:private maybe-declare [kl]
+(defn ^:private maybe-declare
+  "Interns a placeholder so that a forward reference compiles. Resolution is
+   explicitly against `shen`, the namespace the generated code runs in, and not
+   against the ambient *ns*: translation is reachable from ordinary Clojure via
+   eval-kl, and resolving `lambda` in, say, `user` finds nothing and would
+   intern a nil placeholder straight over the `lambda` macro in `shen`."
+  [kl]
   (when (and (symbol? kl)
              (= (name kl) (c/str kl))
-             (not (resolve kl)))
+             (not (ns-resolve 'shen kl)))
     (set* kl nil 'shen))
   kl)
 
+;; Namespace-qualified on purpose. Shen 41's reader.kl defines `function`
+;; itself, as `(fn V)` -- the currying lookup, which goes through arity, get,
+;; the property vector, hash and map. Emitting a bare `function` here would
+;; therefore route every higher-order application back through map, which calls
+;; a local in head position, which emits `function` again: an infinite loop
+;; before the REPL ever starts. What the translator wants is the port's own
+;; primitive, and no kernel defun can shadow a qualified name.
+(def ^:private ^:const apply-function `function)
+
 (defn ^:private maybe-apply [kl path]
   (if (= 'cond (last path)) kl
-      (list 'function kl)))
+      (list apply-function kl)))
 
 (defn shen-kl-to-clj
   ([kl] (shen-kl-to-clj kl #{} [] :unknown))
@@ -160,6 +226,9 @@
                            "false" false
                            (list 'quote kl))
                 seq? (c/let [[fst snd trd & rst] kl
+                        ;; noted before fst is rewritten to if-kl below, so that
+                        ;; the test still gets translated as a non-tail position
+                        if? ('#{if} fst)
                         fn (if ('#{defun} fst)
                              snd
                              fn)
@@ -183,7 +252,7 @@
                         path (conj path fst)
                         snd (c/cond
                               (get '#{defun let lambda} fst) snd
-                              (get '#{if} fst) (shen-kl-to-clj snd scope)
+                              if? (shen-kl-to-clj snd scope)
                               :else (shen-kl-to-clj snd scope path fn))
                         trd (c/cond
                               (get '#{defun} fst) trd
@@ -195,10 +264,7 @@
       :else kl)))
 
 (defn intern [String]
-  (symbol (c/case String
-            "/" "/"
-            "/." slash-dot
-            (s/replace String "/" "-slash-"))))
+  (symbol (munge-name String)))
 
 (c/alter-var-root #'intern c/memoize)
 
@@ -217,7 +283,9 @@
   ([X Y] (set* X Y 'shen.globals)))
 
 (defn ^:private value* [X ns]
-  (c/let [v (c/and (symbol? X) (ns-resolve ns X))]
+  ;; c/when, not c/and: a non-symbol X would leave `false` here, and `false` is
+  ;; not nil, so the :else branch would try to deref it.
+  (c/let [v (c/when (symbol? X) (ns-resolve ns X))]
     (c/cond
       (= X 'and) and-fn
       (= X 'or) or-fn
@@ -232,6 +300,21 @@
 
 (defn simple-error [String]
   (throw (RuntimeException. ^String String)))
+
+(defn clj-function
+  "Resolves a namespace-qualified symbol -- `c/count`, say -- to the Clojure
+   function it names. Shen 41 compiles an application whose head has no
+   registered arity into a lambda-form lookup, so Shen code reaching into
+   Clojure needs this as the fallback when that lookup comes up empty."
+  [V]
+  (c/let [v (c/when (c/and (symbol? V) (namespace V)) (ns-resolve 'shen V))
+          f (c/when v @v)]
+    (c/cond
+      (c/and v (:macro (meta v)))
+      (simple-error (c/str "fn: " V " is a Clojure macro; Shen can call Clojure"
+                           " functions but not macros"))
+      (fn? f) f
+      :else (simple-error (c/str "fn: " V " is undefined")))))
 
 (c/defmacro trap-error [X F]
   `(try
@@ -268,19 +351,30 @@
   (c/and (coll? X) (not (.isEmpty ^java.util.Collection X))))
 
 (defn str [X]
-  (if-not (coll? X) (c/pr-str X)
-          (throw (IllegalArgumentException.
-                  (c/str X " is not an atom; str cannot convert it to a string.")))))
+  (c/cond
+    (coll? X) (throw (IllegalArgumentException.
+                      (c/str X " is not an atom; str cannot convert it to a string.")))
+    ;; symbols read back out in their Shen spelling, not their munged one.
+    ;; c/str rather than c/name: a symbol reaching Shen from embedded Clojure
+    ;; may be namespace-qualified, and c/name would silently drop the alias.
+    (symbol? X) (demunge-name (c/str X))
+    :else (c/pr-str X)))
+
+(def ^:private ^:const cons-bar (symbol "|"))
 
 (defn ^:private seq-to-cons
   ([x] (seq-to-cons x false))
   ([[fst & rst] recursive?]
-     (if fst
-       (list 'cons (if (c/and recursive? (sequential? fst))
-                     (seq-to-cons fst recursive?)
-                     fst)
-             (seq-to-cons rst recursive?))
-       ())))
+     (c/let [conv #(if (c/and recursive? (sequential? %))
+                     (seq-to-cons % recursive?)
+                     %)]
+       (c/cond
+         (nil? fst) ()
+         ;; [X | Y] is a cons pair, not a three element list. Shen's own reader
+         ;; gives `|` this meaning; Clojure's reads it as an ordinary symbol,
+         ;; so embedded Shen -- (defprolog mem X [X | _] <--;) -- needs it here.
+         (= cons-bar (first rst)) (list 'cons (conv fst) (conv (second rst)))
+         :else (list 'cons (conv fst) (seq-to-cons rst recursive?))))))
 
 (defn ^:private cleanup-clj [clj]
   (pred-cond clj
@@ -290,13 +384,13 @@
             clj)
     '#{λ} slash-dot
     char? (intern clj)
+    ;; Shen written inline in Clojure arrives via Clojure's reader, so it has
+    ;; never been through `intern` and is unmunged -- `_` in (defprolog mem X
+    ;; [X | _] <--;) would not match the kernel's own `_`. Munging is
+    ;; idempotent, so KLambda coming back through here is unaffected.
+    ;; Namespace-qualified symbols are Clojure interop and are left alone.
+    (every-pred symbol? (complement namespace)) (munge-symbol clj)
     :else clj))
-
-(defn ^:private define* [name body]
-  (c/let [kl ((function 'shen-shen->kl) name body)]
-    (binding [*ns* (the-ns 'shen)]
-      ((function 'eval) kl)
-      name)))
 
 (defn eval-shen* [body]
   (c/let [body (w/postwalk cleanup-clj body)]
@@ -313,10 +407,14 @@
   `(eval-shen ~@body))
 
 (c/defmacro define [name & body]
-  `(c/let [fn# (eval-shen (~'define ~name ~@body))]
+  `(do
+     (eval-shen (~'define ~name ~@body))
      (defn ~(with-meta name {:dynamic true})
        [& ~'args]
-       (apply (function fn#) ~'args))))
+       ;; Looked up by name at call time. Shen 41's `define` hands back a
+       ;; printable stand-in for the function -- it prints as `(fn foo)` -- and
+       ;; not anything callable.
+       (apply (function (intern ~(c/str name))) ~'args))))
 
 (doseq [[name args] '{defmacro [name] defprolog [name] prolog? [] package [name exceptions]}]
   (eval
@@ -324,9 +422,10 @@
       `(eval-shen ~(concat ['~name ~@args] ~'body)))))
 
 (defn eval-kl [X]
-  (c/let [kl (shen-kl-to-clj (cleanup-clj X))]
-    (binding [*ns* (the-ns 'shen)]
-      (eval kl))))
+  ;; Translation as well as evaluation: shen-kl-to-clj resolves symbols while
+  ;; it works, and must do so as the `shen` namespace sees them.
+  (binding [*ns* (the-ns 'shen)]
+    (eval (shen-kl-to-clj (cleanup-clj X)))))
 
 (c/defmacro lambda [X Y]
   `(fn [~X & XS#]
@@ -348,8 +447,12 @@
 (c/defmacro freeze [X]
  `(fn [] ~X))
 
+;; Shen 41's (fail) is the symbol shen.fail!, so that is what an unwritten slot
+;; should read back as.
+(def ^:private shen-fail (intern "shen.fail!"))
+
 (defn absvector [N]
-  (doto (object-array (int N)) (Arrays/fill 'fail!)))
+  (doto (object-array (int N)) (Arrays/fill shen-fail)))
 
 (defn absvector? [X]
   (identical? array-class (c/class X)))
@@ -395,18 +498,63 @@
 (defmethod read-byte Reader [^Reader S]
   (.read S))
 
-(defn open [Type String Direction]
-  (c/case Type
-    'file
-    (c/let [Path (io/file (value '*home-directory*) String)]
-      (c/cond
-        (= 'in Direction) (io/input-stream Path)
-        (= 'out Direction) (io/output-stream Path)
-        :else (throw (IllegalArgumentException. "invalid direction"))))
-    (throw (IllegalArgumentException. "invalid stream type"))))
+(defn ^:private ^Writer target-writer
+  "Shen captures *stoutput* once, during initialisation. Rebinding Clojure's
+   *out* afterwards -- with-out-str, say -- still has to capture Shen's output,
+   so writes aimed at the captured stdout follow *out* instead of the stream
+   object recorded back then."
+  [S]
+  (c/let [v (ns-resolve 'shen.globals '*stoutput*)]
+    (if (c/and v (identical? @v S)) *out* S)))
 
-(defn type [X MyType]
-  (cast MyType X))
+;; Shen 41 defines `pr` in the kernel (writer.kl) rather than taking it as a
+;; primitive, and drives it from write-byte plus the character-stream hooks
+;; below. Reporting a character stream lets `pr` hand over a whole string at a
+;; time instead of recursing a byte at a time.
+(defmulti write-byte (fn [_ S] (class S)))
+
+(defmethod write-byte OutputStream [B ^OutputStream S]
+  (.write S (c/int B))
+  B)
+
+(defmethod write-byte Writer [B S]
+  (c/let [w (target-writer S)]
+    (.write w (c/int B))
+    (.flush w)
+    B))
+
+(defn shen-dot-char-stoutput? [S]
+  (instance? Writer S))
+
+(defn shen-dot-write-string [String S]
+  (c/let [w (target-writer S)]
+    (.write w ^String String)
+    (.flush w)
+    String))
+
+;; Input stays on the byte path: read-byte already reports EOF as -1, which is
+;; what the kernel's shen.my-read-byte expects, and a character read has no way
+;; to say the same thing through a one-character string.
+(defn shen-dot-char-stinput? [S] false)
+
+(defn shen-dot-read-unit-string [S]
+  (c/let [b (read-byte S)]
+    (if (neg? b) "" (c/str (char b)))))
+
+;; Shen 41 dropped the leading stream-type argument: (open String Direction).
+(defn open [String Direction]
+  (c/let [Path (io/file (value '*home-directory*) String)]
+    (c/cond
+      (= 'in Direction) (io/input-stream Path)
+      (= 'out Direction) (io/output-stream Path)
+      :else (throw (IllegalArgumentException.
+                    (c/str "invalid direction: " Direction))))))
+
+;; A special form, not a function: `(type X T)` annotates X with the type
+;; expression T and evaluates to X. T is data -- defcc emits things like
+;; `(type (cons the ()) (list symbol))`, where `(list symbol)` is a type, not a
+;; call -- so it must never be evaluated.
+(c/defmacro type [X _MyType] X)
 
 (defn close [^java.io.Closeable Stream]
   (.close Stream))
@@ -441,19 +589,19 @@
 (defmethod print-method array-class [o ^Writer w]
   (print-method (vec o) w))
 
-(defn ^:private read-bytes [s]
-  ((function (intern "@p")) (map int s) ()))
-
-(defn parse-shen [s]
-  (c/let [<st_input> (function 'shen-<st_input>)
-          snd (function 'snd)]
-    (-> s read-bytes <st_input> snd)))
+(defn parse-shen
+  "Reads Shen source into a sequence of s-expressions."
+  [s]
+  ((function 'read-from-string) s))
 
 (defn parse-and-eval-shen [s]
   (eval-shen* (parse-shen s)))
 
-(defn reset-macros! []
-  (set '*macros* (filter shen-internal-fn? (value '*macros*))))
+(defn reset-macros!
+  "Drops user-defined macros, keeping the kernel's own."
+  []
+  ;; *macros* is an association list of (name . expander) pairs.
+  (set '*macros* (filter #(shen-internal-fn? (hd %)) (value '*macros*))))
 
 (defn exit
   ([] (exit 0))
@@ -472,7 +620,7 @@
 (defn shen->clj [x]
   (w/postwalk #(pred-cond %
                           #{(symbol "nil")} nil
-                          symbol? (symbol (s/replace (name %) "-slash-" "/"))
+                          symbol? (symbol (demunge-name (name %)))
                           :else %)
               x))
 
