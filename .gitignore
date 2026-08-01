@@ -13,3 +13,5 @@
 repl-port
 # scratch files written by the stream tests in test/shen/primitives.shen
 /test/shen/[0-9]*.txt
+# test output collected by .github/ci-summary.sh
+/logs

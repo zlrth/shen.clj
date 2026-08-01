@@ -332,28 +332,37 @@
 
 (def ^:private results-line #"(?m)^(passed|failed) \.\.\. (\d+)")
 
-(defn failures
-  "Runs `f` and returns the number of failures it reported.
+(defn tally
+  "Runs `f` and returns {:passed n :failed n} as the harness reported it, or nil
+   if it reported nothing at all.
 
    The harness in shen/tests/harness.shen only ever prints its tally, and
    kerneltests.shen calls (reset) once it is done, zeroing the counters -- so
    the printed report is the only surviving record of what happened. Counts are
-   cumulative across a run, hence the max rather than the sum. A run that dies
-   before reporting anything counts as a failure rather than a pass."
+   cumulative across a run, hence the max rather than the sum."
   [f]
   (let [sb (StringBuilder.)]
     (binding [*out* (tee *out* sb)]
       (f)
       (flush))
-    (let [tally (->> (re-seq results-line (str sb))
-                     (reduce (fn [m [_ k v]] (update m k (fnil max 0) (parse-long v))) {}))]
-      (if (contains? tally "passed")
-        (get tally "failed" 0)
-        (do (println "No test results were reported.") 1)))))
+    (let [counts (->> (re-seq results-line (str sb))
+                      (reduce (fn [m [_ k v]]
+                                (update m (keyword k) (fnil max 0) (parse-long v)))
+                              {}))]
+      (when (:passed counts)
+        (merge {:failed 0} counts)))))
 
 (defn -main [& args]
-  (let [failed (failures (if (some #{"extensions"} args) extension-tests test-programs))]
-    (when-not (zero? failed)
-      (println failed "test(s) failed."))
+  (let [extensions? (boolean (some #{"extensions"} args))
+        suite (if extensions? "extensions" "kernel")
+        counts (tally (if extensions? extension-tests test-programs))
+        {:keys [passed failed] :or {passed 0 failed 0}} counts]
+    ;; One machine-readable line, so that a CI job can report the counts
+    ;; without having to reimplement the harness's output format. A run that
+    ;; died before reporting anything is a failure, not a pass -- otherwise a
+    ;; suite that never started looks exactly like one that went perfectly.
+    (println (format "%nSHEN-RESULT suite=%s passed=%d failed=%d" suite passed failed))
+    (when-not counts
+      (println "The suite reported no results at all."))
     (shutdown-agents)
-    (System/exit (if (zero? failed) 0 1))))
+    (System/exit (if (and counts (zero? failed)) 0 1))))

@@ -23,9 +23,9 @@ jobs:
         jdk: ['21', '25']
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: ${{ matrix.jdk }}
@@ -37,7 +37,7 @@ jobs:
       # target/ is deliberately not cached. The kernel render has to happen
       # from scratch every run: a stale target/classes silently satisfies
       # (require 'shen), which is exactly how a broken build once passed.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.m2/repository
@@ -46,19 +46,41 @@ jobs:
           key: ${{ runner.os }}-clj-${{ hashFiles('deps.edn') }}
           restore-keys: ${{ runner.os }}-clj-
 
+      - run: mkdir -p logs
+
+      # Every suite is teed to logs/, which the summary step turns into a table
+      # and the artifact step keeps. `shell: bash` is what adds pipefail, so a
+      # failing suite is not masked by tee's exit status.
+      #
       # Renders shen/klambda/*.kl into target/generated on the way through.
       - name: Clojure tests
-        run: clojure -M:test
+        shell: bash
+        run: clojure -M:test 2>&1 | tee logs/clojure.log
 
       # `yes` answers the harness's "failed; continue?" prompt, so a failure is
-      # reported in full rather than stopping at the first one. Without
-      # pipefail bash reports the last command's status, which is the one we
-      # want here.
+      # reported in full rather than stopping at the first one. It is fed in by
+      # redirect rather than a pipe: as a pipeline stage it would be killed by
+      # SIGPIPE at exit, and pipefail would read that as the step failing.
       - name: Shen kernel suite
-        run: yes | clojure -M:shen-test
+        shell: bash
+        run: clojure -M:shen-test < <(yes) | tee logs/kernel.log
 
       - name: Shen extension suite
-        run: yes | clojure -M:shen-ext-test
+        shell: bash
+        run: clojure -M:shen-ext-test < <(yes) | tee logs/extensions.log
+
+      # always(), so a run that fails still says how far it got.
+      - name: Summarise results
+        if: always()
+        shell: bash
+        run: .github/ci-summary.sh "Tests — JDK ${{ matrix.jdk }}"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: logs-jdk${{ matrix.jdk }}
+          path: logs/
+          retention-days: 30
 
   aot:
     name: AOT build and standalone jar
@@ -66,9 +88,9 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
@@ -77,7 +99,7 @@ jobs:
         with:
           cli: latest
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.m2/repository
@@ -85,6 +107,8 @@ jobs:
             .cpcache
           key: ${{ runner.os }}-clj-${{ hashFiles('deps.edn') }}
           restore-keys: ${{ runner.os }}-clj-
+
+      - run: mkdir -p logs
 
       - name: Build standalone jar
         run: clojure -T:build uber
@@ -95,10 +119,12 @@ jobs:
       # `_` used to munge onto a single class file, silently discarding one of
       # the two functions.
       - name: Shen kernel suite against compiled classes
-        run: yes | clojure -M:shen-test
+        shell: bash
+        run: clojure -M:shen-test < <(yes) | tee logs/kernel.log
 
       - name: Shen extension suite against compiled classes
-        run: yes | clojure -M:shen-ext-test
+        shell: bash
+        run: clojure -M:shen-ext-test < <(yes) | tee logs/extensions.log
 
       # The jar should work as a script runner: evaluate stdin, then exit at
       # EOF. `timeout` and the size check guard the regression where EOF left
@@ -108,8 +134,20 @@ jobs:
         timeout-minutes: 5
         run: |
           jar=$(ls target/shen.clj-*-standalone.jar)
-          printf '(* 6 7)\n' | timeout 120 java -Xss16m -jar "$jar" > repl.txt
-          cat repl.txt
-          grep -qx '(0-) 42' repl.txt || { echo "::error::jar did not evaluate (* 6 7)"; exit 1; }
-          size=$(wc -c < repl.txt)
+          printf '(* 6 7)\n' | timeout 120 java -Xss16m -jar "$jar" > logs/repl.txt
+          cat logs/repl.txt
+          grep -qx '(0-) 42' logs/repl.txt || { echo "::error::jar did not evaluate (* 6 7)"; exit 1; }
+          size=$(wc -c < logs/repl.txt)
           [ "$size" -lt 10000 ] || { echo "::error::REPL flooded $size bytes at EOF"; exit 1; }
+
+      - name: Summarise results
+        if: always()
+        shell: bash
+        run: .github/ci-summary.sh "AOT — compiled kernel"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: logs-aot
+          path: logs/
+          retention-days: 30

@@ -110,6 +110,14 @@ which has its own alias:
 The `yes |` matters only on failure: the harness asks `failed; continue?` after
 a failing test, so without it a regression stops the run rather than reporting.
 
+Both aliases end with a machine-readable line and exit non-zero if anything
+failed, or if the suite reported nothing at all:
+
+    SHEN-RESULT suite=kernel passed=134 failed=0
+
+CI turns those into a table on each run's summary page, and keeps the full
+output as an artifact, so the counts stay visible per commit.
+
 The Clojure-side tests:
 
     clojure -M:test
