@@ -125,7 +125,7 @@ The Clojure-side tests:
     Ran 11 tests containing 50 assertions.
     0 failures, 0 errors.
 
-The benchmarks:
+The benchmarks, all 94 of which complete:
 
     clojure -M:benchmarks
 
@@ -213,6 +213,32 @@ and `shen.initialise_environment` would compile to a single class file, the
 second silently replacing the first.
 
 
+### Tail calls
+
+A self-call in tail position becomes `recur`, so a Shen function that recurses
+in tail position runs in constant stack. Tail position is derived from the form
+being translated rather than guessed at: `lambda` and `freeze` build a new fn,
+so their bodies are the tail of *that* fn and a `recur` there would rebind its
+parameters; `trap-error` puts both arguments inside try/catch, which `recur`
+cannot cross; and an application's arguments are all evaluated before the call,
+so none of them is tail. The argument count has to match the arity carrying the
+body, because `defun` emits the shorter arities as partials.
+
+Multi-clause pattern matches need a second rewrite. Under the
+`factorise-defun` extension — which the benchmarks enable — Shen compiles them
+into a thunk-based goto, freezing the fallthrough once and thawing it wherever
+a pattern fails:
+
+    (let GoTo (freeze (f X (- N 1)))
+      (if (cons? X) ... (thaw GoTo)))
+
+Thawing that in tail position is the loop it was frozen to stand for, so it
+becomes `recur` as well — but only when nothing has rebound a name the frozen
+arguments mention, since they are then evaluated at the thaw rather than at the
+freeze. Without this, matching against many clauses grows the stack once per
+iteration.
+
+
 ### Known limitations
 
 * `shen/klambda/stlib.kl` — the optional standard library, built separately by
@@ -220,9 +246,6 @@ second silently replacing the first.
   the JVM's 64K limit on the size of a single method. Nothing in the kernel or
   the kernel test suite refers to it.
 * Clojure macros cannot be called from Shen; see above.
-* Tail calls become `recur` by a heuristic rather than a real tail-position
-  analysis. 62 of the benchmarks run; `match list (multiple clauses, not
-  matching)` still overflows the stack.
 * Performance is not a goal for 0.x, but some tuning has been made to ease
   development.
 
@@ -237,7 +260,6 @@ This port, while aiming to conform closely (and hopefully fully) to the [Shen sp
   * Bringing smaller parts of Shen goodness back into Clojure: predicate dispatch, pattern matching, prolog. Maybe even the type system.
   * Ensuring Shen can call Clojure/Java properly.
 * Future / Questions
-  * Real tail-position analysis instead of the current `recur` heuristic.
   * Loading `stlib.kl` by splitting oversized methods.
   * Making Shen as lazy as its host?
   * Existing Shen libraries and portability?

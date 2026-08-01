@@ -1,6 +1,5 @@
 (ns shen.primitives
   (:require [clojure.core :as c]
-            [clojure.set :as set]
             [clojure.string :as s]
             [clojure.walk :as w]
             [clojure.java.io :as io]
@@ -122,13 +121,17 @@
   (c/< 2000 (count (flatten s))))
 
 (defn ^:private may-return-fn [name parameters body]
-  (if-not (c/or (shen-internal-fn? name) (may-cause-invalid-codesize? body))
-    `([~@parameters & extra#]
-        (c/let [result# (eval-shen ~@body)]
-          (if extra# (apply result# extra#)
-              result#)))
-    `([~@parameters & extra#]
-        (throw (ArityException. (+ ~(count parameters) (count extra#)) (c/name name))))))
+  ;; This copy of the body is quoted and evaluated at run time rather than
+  ;; compiled, so a `recur` the translator put in tail position would be
+  ;; evaluated outside any loop. Spell it as the plain self-call it stands for.
+  (c/let [body (w/postwalk-replace {'recur name} body)]
+    (if-not (c/or (shen-internal-fn? name) (may-cause-invalid-codesize? body))
+      `([~@parameters & extra#]
+          (c/let [result# (eval-shen ~@body)]
+            (if extra# (apply result# extra#)
+                result#)))
+      `([~@parameters & extra#]
+          (throw (ArityException. (+ ~(count parameters) (count extra#)) (c/name name)))))))
 
 (declare eval-shen)
 
@@ -174,18 +177,78 @@
 
 (def ^:private ^:const slash-dot (symbol "/."))
 
-(defn ^:private recur?
-  ([path] (partial recur? path))
-  ([path fn]
-     (c/or (= 'cond (last (drop-last path)))
-           ;; `if-kl`, not `if`: the translator renames `if` before the path is
-           ;; extended, so spelling it `if` here never matched anything. That
-           ;; left a self-call in the tail of an `(if ...)` body compiling to
-           ;; real recursion -- which only shows up once pattern factorisation
-           ;; is enabled, since that is what makes the compiler emit `if` bodies
-           ;; rather than `cond` ones.
-           (set/superset? '#{defun cond if-kl do let}
-                          (c/set path)))))
+(defn ^:private goto-binding
+  "Recognises the shape `factorise-defun` compiles a multi-clause pattern match
+   into: the fallthrough is frozen once, bound to a name, and thawed at every
+   point a pattern fails --
+
+     (let GoTo (freeze (f X (- N 1)))
+       (if (cons? X) ... (thaw GoTo)))
+
+   Returned as [name args] when the frozen call is a self-call at the arity
+   carrying the body, so that a `(thaw GoTo)` in tail position can be turned
+   back into the loop it is standing in for. Without this the fallthrough is a
+   closure call, and matching against many clauses grows the stack once per
+   iteration."
+  [head args n self]
+  (c/when (c/and self (c/= 'let head) (c/= 3 n))
+    (c/let [[g v] args]
+      (c/when (c/and (symbol? g) (seq? v) (c/= 'freeze (first v)))
+        (c/let [call (second v)]
+          (c/when (c/and (seq? call)
+                         (c/= (first call) (:name self))
+                         (c/= (count (rest call)) (:arity self)))
+            [g (rest call)]))))))
+
+(defn ^:private drop-shadowed
+  "A goto stands for a call whose arguments are evaluated where it is thawed
+   rather than where it was frozen, so rebinding a name those arguments mention
+   would change what they evaluate to. Such a goto stops being usable from
+   there."
+  [self bound]
+  (if (c/and bound (seq (:gotos self)))
+    (update self :gotos
+            #(into {} (remove (fn [[_ args]]
+                                (contains? (c/set (flatten args)) bound))
+                              %)))
+    self))
+
+(defn ^:private tail-call?
+  "Whether a self-call here can become `recur`.
+
+   It has to be in tail position, and its argument count has to match the arity
+   carrying the body: `recur` rebinds the parameters of the arity it appears in,
+   and the shorter arities `defun` emits are partials."
+  [head n self tail?]
+  (c/boolean (c/and tail? self (c/= head (:name self)) (c/= n (:arity self)))))
+
+(defn ^:private arg-modes
+  "How each argument of a form is translated -- `:raw` for the names `defun`,
+   `let` and `lambda` bind rather than evaluate, `true` for the positions this
+   form leaves in tail position, `false` for the rest.
+
+   Anything not named here is an application, and an application's arguments are
+   all evaluated before the call, so none of them is tail. `lambda` and `freeze`
+   build a fresh fn: their bodies are the tail of *that* fn, and a `recur` there
+   would rebind its parameters rather than the enclosing defun's. `trap-error`
+   puts both arguments inside try/catch, which `recur` cannot cross. An `if`
+   given fewer than three arguments closes over its branches instead of
+   evaluating one, so neither is tail either."
+  [head n tail? clause?]
+  (c/let [body-from (fn [from tail-last]
+                      (c/concat (repeat (max 0 (dec (c/- n from))) false)
+                                (c/when (c/> n from) [tail-last])))]
+    (vec
+     (c/cond
+       (c/= 'defun head) (c/concat [:raw :raw] (body-from 2 true))
+       (c/= 'lambda head) (c/cons :raw (repeat (max 0 (dec n)) false))
+       (c/= 'freeze head) (repeat n false)
+       (c/= 'let head) (c/concat [:raw false] (body-from 2 tail?))
+       (get '#{if if-kl} head) (if (c/= 3 n) [false tail? tail?] (repeat n false))
+       (c/= 'do head) (body-from 0 tail?)
+       (c/= 'trap-error head) (repeat n false)
+       (c/or (c/= 'cond head) clause?) (repeat n tail?)
+       :else (repeat n false)))))
 
 (declare set*)
 
@@ -216,51 +279,64 @@
       (list apply-function kl)))
 
 (defn shen-kl-to-clj
-  ([kl] (shen-kl-to-clj kl #{} [] :unknown))
-  ([kl scope] (shen-kl-to-clj kl scope [] :no-recur))
-  ([kl scope path fn]
+  ([kl] (shen-kl-to-clj kl #{} [] nil false))
+  ([kl scope] (shen-kl-to-clj kl scope [] nil false))
+  ([kl scope path self tail?]
      (pred-cond kl
                 scope kl
                 symbol? (c/case (name kl)
                            "true" true
                            "false" false
                            (list 'quote kl))
-                seq? (c/let [[fst snd trd & rst] kl
-                        ;; noted before fst is rewritten to if-kl below, so that
-                        ;; the test still gets translated as a non-tail position
-                        if? ('#{if} fst)
-                        fn (if ('#{defun} fst)
-                             snd
-                             fn)
-                        scope (c/cond
-                                (get '#{defun} fst) (into scope trd)
-                                (get '#{let lambda} fst) (conj scope snd)
-                                :else scope)
-                        fst (pred-cond fst
-                              (every-pred
-                               #{fn}
-                               (recur? path)) 'recur
-                              (some-fn
-                               interned?
-                               scope) (maybe-apply fst path)
-                              seq? (maybe-apply (shen-kl-to-clj fst scope) path)
-                              '#{if} 'if-kl
-                              :else
-                              (if (= 'cond (last path))
-                                (shen-kl-to-clj fst scope)
-                                (maybe-declare fst)))
-                        path (conj path fst)
-                        snd (c/cond
-                              (get '#{defun let lambda} fst) snd
-                              if? (shen-kl-to-clj snd scope)
-                              :else (shen-kl-to-clj snd scope path fn))
-                        trd (c/cond
-                              (get '#{defun} fst) trd
-                              (get '#{let} fst) (shen-kl-to-clj trd scope)
-                              :else (shen-kl-to-clj trd scope path fn))]
-                       (take-while (complement nil?)
-                                   (concat [fst snd trd]
-                                           (map #(shen-kl-to-clj % scope path fn) rst))))
+                seq? (if-not (seq kl)
+                       kl
+                       (c/let [[fst & args] kl
+                               n (count args)]
+                         (if (c/and tail? self (c/= 'thaw fst) (c/= 1 n)
+                                    (contains? (:gotos self) (first args)))
+                           ;; Thawing the fallthrough in tail position is the
+                           ;; loop it was frozen to stand for.
+                           (c/cons 'recur
+                                   (map #(shen-kl-to-clj % scope path self false)
+                                        (get (:gotos self) (first args))))
+                           (c/let [;; A cond clause is a bare (test expr) pair,
+                                   ;; so its head is a test to evaluate rather
+                                   ;; than something to apply.
+                                   clause? (c/= 'cond (last path))
+                                   self (if (c/= 'defun fst)
+                                          {:name (first args)
+                                           :arity (count (second args))
+                                           :gotos {}}
+                                          self)
+                                   scope (c/cond
+                                           (c/= 'defun fst) (into scope (second args))
+                                           (get '#{let lambda} fst) (conj scope (first args))
+                                           :else scope)
+                                   goto (goto-binding fst args n self)
+                                   self (c/cond
+                                          goto (assoc-in (drop-shadowed self (first args))
+                                                         [:gotos (first goto)] (second goto))
+                                          (get '#{let lambda} fst) (drop-shadowed self (first args))
+                                          :else self)
+                                   ;; Decided from the original head: `if` is
+                                   ;; rewritten to `if-kl` just below.
+                                   modes (arg-modes fst n tail? clause?)
+                                   head (c/cond
+                                          (tail-call? fst n self tail?) 'recur
+                                          (c/or (interned? fst)
+                                                (scope fst)) (maybe-apply fst path)
+                                          (seq? fst) (maybe-apply (shen-kl-to-clj fst scope) path)
+                                          (get '#{if} fst) 'if-kl
+                                          clause? (shen-kl-to-clj fst scope)
+                                          :else (maybe-declare fst))
+                                   path (conj path head)]
+                             (c/cons head
+                                     (map (fn [arg mode]
+                                            (if (c/= :raw mode)
+                                              arg
+                                              (shen-kl-to-clj arg scope path self mode)))
+                                          args
+                                          modes))))))
       :else kl)))
 
 (defn intern [String]
