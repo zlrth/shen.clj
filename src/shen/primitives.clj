@@ -490,13 +490,39 @@
     (flush)
     X))
 
+(def ^:dynamic *exit-on-console-eof*
+  "Set by the REPL. The kernel's shen.read-loop turns EOF into an `empty
+   stream` error, which the toplevel traps before prompting again -- against a
+   stream that is still at EOF. On the console that never terminates: piping a
+   script in, or pressing Ctrl-D, spins printing the error forever. Ending the
+   session is what Ctrl-D does everywhere else.
+
+   Off by default, so embedding Shen or running the test suites still just sees
+   -1 at EOF and decides for itself."
+  false)
+
+(defn ^:private console-in?
+  "True when S is the console stream Shen captured as *stinput* at startup."
+  [S]
+  (c/let [v (ns-resolve 'shen.globals '*stinput*)]
+    (c/boolean (c/and v (identical? @v S)))))
+
+(defn ^:private eof [S]
+  (c/when (c/and *exit-on-console-eof* (console-in? S))
+    (newline)
+    (flush)
+    (System/exit 0))
+  -1)
+
 (defmulti read-byte class)
 
 (defmethod read-byte InputStream [^InputStream S]
-  (.read S))
+  (c/let [b (.read S)]
+    (if (neg? b) (eof S) b)))
 
 (defmethod read-byte Reader [^Reader S]
-  (.read S))
+  (c/let [b (.read S)]
+    (if (neg? b) (eof S) b)))
 
 (defn ^:private ^Writer target-writer
   "Shen captures *stoutput* once, during initialisation. Rebinding Clojure's

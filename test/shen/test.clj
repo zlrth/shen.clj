@@ -309,7 +309,51 @@
    (cd "shen")
    (load "tests/extensions/runme.shen")))
 
+(defn ^:private tee
+  "A writer that forwards to `out` and also accumulates into `sb`.
+
+   Both arities have to be given: proxy replaces every overload of a method
+   name at once, so supplying only write(char[], int, int) would leave
+   write(int) and write(String) dispatching to it with the wrong arity rather
+   than delegating through Writer as they normally would. Either arity may be
+   handed a char[] or a String."
+  [^java.io.Writer out ^StringBuilder sb]
+  (letfn [(emit [^String s] (.append sb s) (.write out s))]
+    (proxy [java.io.Writer] []
+      (write
+        ([x] (emit (cond (integer? x) (str (char x))
+                         (string? x) x
+                         :else (String. ^chars x))))
+        ([x off len] (emit (if (string? x)
+                             (subs x off (+ off len))
+                             (String. ^chars x off len)))))
+      (flush [] (.flush out))
+      (close [] (.flush out)))))
+
+(def ^:private results-line #"(?m)^(passed|failed) \.\.\. (\d+)")
+
+(defn failures
+  "Runs `f` and returns the number of failures it reported.
+
+   The harness in shen/tests/harness.shen only ever prints its tally, and
+   kerneltests.shen calls (reset) once it is done, zeroing the counters -- so
+   the printed report is the only surviving record of what happened. Counts are
+   cumulative across a run, hence the max rather than the sum. A run that dies
+   before reporting anything counts as a failure rather than a pass."
+  [f]
+  (let [sb (StringBuilder.)]
+    (binding [*out* (tee *out* sb)]
+      (f)
+      (flush))
+    (let [tally (->> (re-seq results-line (str sb))
+                     (reduce (fn [m [_ k v]] (update m k (fnil max 0) (parse-long v))) {}))]
+      (if (contains? tally "passed")
+        (get tally "failed" 0)
+        (do (println "No test results were reported.") 1)))))
+
 (defn -main [& args]
-  (if (some #{"extensions"} args)
-    (extension-tests)
-    (test-programs)))
+  (let [failed (failures (if (some #{"extensions"} args) extension-tests test-programs))]
+    (when-not (zero? failed)
+      (println failed "test(s) failed."))
+    (shutdown-agents)
+    (System/exit (if (zero? failed) 0 1))))

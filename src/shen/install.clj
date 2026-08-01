@@ -182,7 +182,8 @@
 
 (defn -main []
   (install)
-  (binding [*ns* (the-ns 'shen)]
+  (binding [*ns* (the-ns 'shen)
+            shen.primitives/*exit-on-console-eof* true]
     ((resolve 'shen/-main))))
 
 ;; Requiring this namespace is enough to bring up a working Shen environment,

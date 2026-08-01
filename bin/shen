@@ -5,7 +5,13 @@ set -e
 cd "$(dirname "$0")/.."
 
 jar=(target/shen.clj-*-standalone.jar)
-rlwrap=$(command -v rlwrap || true)
+
+# Readline only helps a person at a terminal; keep it out of the way when
+# stdin is a pipe or a file, so the REPL can be used to run a script.
+rlwrap=
+if [ -t 0 ]; then
+	rlwrap=$(command -v rlwrap || true)
+fi
 
 if [ -e "${jar[0]}" ]; then
 	exec $rlwrap java -Xss16m $JAVA_OPTS -jar "${jar[0]}" "$@"

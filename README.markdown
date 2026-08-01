@@ -45,6 +45,12 @@ loads it from source, which takes a while. Building once makes startup fast:
 `bin/shen` prefers the standalone jar if one has been built, and uses `rlwrap`
 for readline support when it is installed.
 
+The REPL reads stdin, so it doubles as a script runner and ends the session at
+EOF, the same as Ctrl-D:
+
+    $ printf '(* 6 7)\n' | ./bin/shen
+    (0-) 42
+
 ---
 
     Shen, www.shenlanguage.org, copyright (C) 2010-2024, Mark Tarver
