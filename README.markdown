@@ -1,5 +1,7 @@
 # 神.clj | Shen for Clojure
 
+[![CI](https://github.com/zlrth/shen.clj/actions/workflows/ci.yml/badge.svg)](https://github.com/zlrth/shen.clj/actions/workflows/ci.yml)
+
 http://shenlanguage.org/
 
 Shen is a portable functional programming language by [Mark Tarver](http://www.lambdassociates.org/) that offers
