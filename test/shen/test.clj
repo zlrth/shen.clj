@@ -302,5 +302,14 @@
    (cd "shen/tests")
    (load "runme.shen")))
 
-(defn -main []
-  (test-programs))
+;; The extension suite is not reached by shen/tests/runme.shen, and its own
+;; runme loads by paths relative to the kernel root rather than shen/tests.
+(defn extension-tests []
+  (神
+   (cd "shen")
+   (load "tests/extensions/runme.shen")))
+
+(defn -main [& args]
+  (if (some #{"extensions"} args)
+    (extension-tests)
+    (test-programs)))

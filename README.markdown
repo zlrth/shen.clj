@@ -83,13 +83,24 @@ for readline support when it is installed.
 
 ### Tests
 
-The Shen kernel test suite, from `shen/tests`:
+The Shen kernel test suite, `shen/tests/runme.shen`:
 
     yes | clojure -M:shen-test
 
     passed ... 134
     failed ... 0
     pass rate ... 100%
+
+`runme.shen` does not reach the extension suite under `shen/tests/extensions`,
+which has its own alias:
+
+    yes | clojure -M:shen-ext-test
+
+    passed ... 8
+    failed ... 0
+
+The `yes |` matters only on failure: the harness asks `failed; continue?` after
+a failing test, so without it a regression stops the run rather than reporting.
 
 The Clojure-side tests:
 

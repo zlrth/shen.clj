@@ -12,10 +12,15 @@
   :repl {:jvm-opts ["-Xss16m"]
          :main-opts ["-m" "shen.install"]}
 
-  ;; Shen's own test suite, from shen/test-programs.
+  ;; Shen's own kernel test suite: shen/tests/runme.shen.
   :shen-test {:extra-paths ["test"]
               :jvm-opts ["-Xss16m"]
               :main-opts ["-m" "shen.test"]}
+
+  ;; The extension suite, which shen/tests/runme.shen does not reach.
+  :shen-ext-test {:extra-paths ["test"]
+                  :jvm-opts ["-Xss16m"]
+                  :main-opts ["-m" "shen.test" "extensions"]}
 
   ;; The Shen benchmarks.
   :benchmarks {:extra-paths ["test"]
