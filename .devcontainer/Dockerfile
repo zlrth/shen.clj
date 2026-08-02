@@ -71,18 +71,23 @@ ENV PATH="/home/${USERNAME}/.local/bin:${PATH}"
 # volume, so onboarding is answered once and survives the container.
 ENV CLAUDE_CONFIG_DIR="/home/${USERNAME}/.claude"
 
-# Seeded at build time so the *first* run is clean too, before the volume has
-# anything in it: Docker copies image content into an empty named volume, so
-# this file becomes that volume's initial state. bypassPermissionsModeAccepted
-# only pre-answers the warning this whole directory exists to make defensible;
-# drop the key to be asked on every start instead.
-RUN printf '%s\n' \
-      '{' \
-      '  "hasCompletedOnboarding": true,' \
-      '  "bypassPermissionsModeAccepted": true,' \
-      '  "theme": "dark",' \
-      '  "projects": { "/workspace": { "hasTrustDialogAccepted": true } }' \
-      '}' > /home/${USERNAME}/.claude/.claude.json
+# The answers themselves, merged into the volume's .claude.json at every start
+# by init-claude-config. Kept outside ${CLAUDE_CONFIG_DIR} on purpose: a file
+# written *into* the mount point only ever reaches an empty volume, which is
+# exactly the case that stops holding after your first run.
+#
+# bypassPermissionsModeAccepted pre-answers the warning this directory exists to
+# make defensible; drop the key from claude-onboarding.json to be asked instead.
+COPY --chown=${USER_UID}:${USER_GID} claude-onboarding.json /usr/local/share/claude-onboarding.json
+COPY --chown=${USER_UID}:${USER_GID} init-claude-config.sh /usr/local/bin/init-claude-config
+
+# Chains to the base image's entrypoint, so `docker run … bash -c …` and the
+# inherited `clj` dispatch both behave exactly as before.
+USER root
+RUN chmod 0755 /usr/local/bin/init-claude-config \
+ && chmod 0644 /usr/local/share/claude-onboarding.json
+USER ${USERNAME}
+ENTRYPOINT ["/usr/local/bin/init-claude-config"]
 
 # Every alias in deps.edn already sets -Xss16m; JAVA_TOOL_OPTIONS is left unset
 # on purpose, since it writes a "Picked up ..." line to stderr that ends up in
