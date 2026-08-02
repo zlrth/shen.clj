@@ -1,0 +1,9 @@
+{
+  "features": {
+    "ghcr.io/zlrth/devcontainer-features/claude-sandbox:1": {
+      "version": "1.0.0",
+      "resolved": "ghcr.io/zlrth/devcontainer-features/claude-sandbox@sha256:5ca9e718a11bff3b169b4def6ee2ce27c451458716e1f8743d31ceb562c2e0e5",
+      "integrity": "sha256:5ca9e718a11bff3b169b4def6ee2ce27c451458716e1f8743d31ceb562c2e0e5"
+    }
+  }
+}

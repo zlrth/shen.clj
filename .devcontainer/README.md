@@ -1,26 +1,27 @@
 # Dev container
 
 A container for running Claude Code against this repo with a bounded blast
-radius, so that `--dangerously-skip-permissions` is a defensible thing to type.
+radius. The sandbox itself — Claude Code, the default-deny egress firewall,
+persistent auth/state, scoped sudo — comes from the
+[`claude-sandbox` feature](https://github.com/zlrth/devcontainer-features/tree/main/src/claude-sandbox);
+this directory only adds what is shen.clj's own: the JDK/Clojure image, the
+cache volumes, and the Maven/Clojars allowlist. See the feature's README for
+the full design notes and troubleshooting.
 
-The toolchain is JDK plus the Clojure CLI and nothing else, which is why this
-ports cleanly — `.github/workflows/ci.yml` already runs the whole suite on
-`ubuntu-latest`.
+The seeded default permission mode is **acceptEdits** — edits are
+auto-approved, commands still ask. The sandbox is what makes
+`bypassPermissions` defensible, but it's an opt-in
+(`"permissionMode": "bypassPermissions", "acceptBypassPermissions": true` on
+the feature), not the default.
 
 ## What it protects, and what it doesn't
 
-Two separate things are contained here:
-
 - **Writes** — bounded by the container. On macOS Docker is a VM, so this is
   kernel-level isolation, not a seatbelt profile.
-- **Egress** — bounded by `init-firewall.sh`, which sets `OUTPUT` to default
-  DROP and allowlists only what this repo and Claude Code actually need.
+- **Egress** — bounded by the feature's firewall: `OUTPUT` defaults to DROP,
+  and only Anthropic's hosts, GitHub, Maven Central, and Clojars are allowed.
 
-The second one is the part that is easy to skip and shouldn't be. A container
-with open networking has contained the filesystem but not the data: anything
-readable is still exfiltratable.
-
-What it does **not** protect:
+Not protected:
 
 - **Your working tree.** `/workspace` is a bind mount of the real repo, so an
   `rm -rf` in there is an `rm -rf` on your disk. Commit or push before an
@@ -31,69 +32,24 @@ What it does **not** protect:
 ## Quick start
 
 Authenticate on the host first. Do not mount `~/.claude` as a substitute — on
-macOS the OAuth credentials live in the Keychain, not in that directory, so the
-mount would carry your session history in without carrying auth:
+macOS the OAuth credentials live in the Keychain, not in that directory:
 
 ```bash
 claude setup-token                      # on the host
 export CLAUDE_CODE_OAUTH_TOKEN=...      # devcontainer.json forwards this
 ```
 
-The token alone is not sufficient, and the failure is confusing: the first-run
-wizard asks you to pick a login method *without ever consulting
-`CLAUDE_CODE_OAUTH_TOKEN`*, so a correctly-forwarded token still lands you on a
-sign-in screen. The wizard runs whenever `.claude.json` is absent, and that file
-lives at the home root rather than in `~/.claude` — outside the state volume,
-therefore missing on every `--rm` run. The Dockerfile fixes this by setting
-`CLAUDE_CONFIG_DIR=/home/dev/.claude`, which moves `.claude.json` into the
-volume, and by seeding an onboarded one so even the first run goes straight to
-the prompt. See [Troubleshooting](#troubleshooting) if you meet it anyway.
+Then open the repo in VS Code and reopen in container, or from the CLI:
 
 ```bash
-docker build --build-arg JDK_VERSION=21 -t shen-clj-dev:21 .devcontainer
-
-docker run -it --rm \
-  --cap-add=NET_ADMIN --cap-add=NET_RAW --memory=8g \
-  -v "$PWD":/workspace \
-  -v shen-clj-m2:/home/dev/.m2 \
-  -v shen-clj-gitlibs:/home/dev/.gitlibs \
-  -v shen-clj-cpcache:/workspace/.cpcache \
-  -v shen-clj-target:/workspace/target \
-  -v shen-clj-claude-state:/home/dev/.claude \
-  -e CLAUDE_CODE_OAUTH_TOKEN \
-  shen-clj-dev:21 \
-  bash -c 'sudo /usr/local/bin/init-firewall.sh && exec claude --dangerously-skip-permissions'
+npx @devcontainers/cli up --workspace-folder .
+npx @devcontainers/cli exec --workspace-folder . claude
 ```
 
-Note that `--cap-drop=ALL` is *not* used. `sudo` needs `SETUID`/`SETGID`, and
-dropping them takes `init-firewall.sh` down with it.
-
-## The firewall
-
-Allowed by default:
-
-| Host | Why |
-| --- | --- |
-| `api.anthropic.com` | the API, and the telemetry that rides on it |
-| `claude.ai` | installer, artifact publishing |
-| GitHub published ranges, from `api.github.com/meta` | `io.github.cognitect-labs/test-runner` is a git dep |
-| `codeload.github.com`, `objects.githubusercontent.com`, `raw.githubusercontent.com` | belt and braces over the ranges above |
-| `repo1.maven.org`, `repo.maven.apache.org` | Maven Central |
-| `repo.clojars.org` | Clojars |
-
-Add more for a session with `EXTRA_ALLOWED_DOMAINS="a.example b.example"`.
-
-The script verifies both directions before it exits — that `example.com` is
-blocked *and* that `api.anthropic.com` is reachable — so a silently-broken
-ruleset can't read as a working one.
-
-Two things worth knowing:
-
-- Allowlisting is **by resolved IP, captured at start**. The CDNs behind Maven
-  Central and GitHub rotate, so a container left up for days may start seeing
-  drops. Re-run the script to refresh.
-- `sudo` is scoped to `init-firewall.sh` alone, deliberately. An agent with
-  blanket `sudo` can flush the egress rules, which would defeat the point.
+Allow more domains for one session with
+`EXTRA_ALLOWED_DOMAINS="a.example b.example" sudo /usr/local/bin/init-firewall.sh`,
+or permanently via the feature's `allowedDomains` option in
+`devcontainer.json`.
 
 ## Volumes
 
@@ -103,7 +59,10 @@ Two things worth knowing:
 | `shen-clj-gitlibs` | `/home/dev/.gitlibs` | as above, for git deps |
 | `shen-clj-cpcache` | `/workspace/.cpcache` | **must** be isolated — see below |
 | `shen-clj-target` | `/workspace/target` | keeps container and host builds from overwriting each other's render |
-| `shen-clj-claude-state` | `/home/dev/.claude` | Claude Code state — sessions, and (via `CLAUDE_CONFIG_DIR`) the `.claude.json` that records onboarding |
+
+Claude Code's own state lives in a volume the feature manages (keyed by
+devcontainer, mounted at `/claude-state`), which is what makes auth and
+onboarding survive `--rm` runs.
 
 `.cpcache` is not optional. The Clojure CLI always prefers `./.cpcache` over
 `CLJ_CACHE` when the project directory is writable, and it caches *absolute*
@@ -124,43 +83,7 @@ docker volume rm shen-clj-target
 ## JDKs
 
 CI tests 21 and 25. The container defaults to 21; rebuild with
-`--build-arg JDK_VERSION=25` for the other. Both were verified with the full
-suite — 11 Clojure tests / 50 assertions, 134 kernel, 8 extension, zero
-failures, from a clean `target/` and through the firewall.
+`--build-arg JDK_VERSION=25` for the other.
 
 Worth noting: the host toolchain here is GraalVM 23, which is neither of the
 versions CI covers. The container is the easy way onto a JDK you actually test.
-
-## Troubleshooting
-
-**It asks me to log in anyway.** Almost always a stale state volume: the seeded
-`.claude.json` is copied in only when the volume is *empty*, so a volume created
-by an earlier build still has none. Recreate it:
-
-```bash
-docker volume rm shen-clj-claude-state
-```
-
-If that isn't it, check the token actually crossed the boundary. `-e VAR` with
-no value forwards nothing when `VAR` is set but not exported, and `echo $VAR`
-in the shell can't tell the two apart:
-
-```bash
-docker run --rm -e CLAUDE_CODE_OAUTH_TOKEN shen-clj-dev:21 \
-  bash -c 'echo "${CLAUDE_CODE_OAUTH_TOKEN:-<EMPTY>}"'
-```
-
-A token that arrives but is wrong fails loudly rather than silently — headless
-mode says `401 OAuth access token is invalid`, no sign-in screen. Note that a
-Console API key (`sk-ant-api03-…`) is not an OAuth token (`sk-ant-oat01-…`);
-the key belongs in `ANTHROPIC_API_KEY`, and only `claude setup-token` produces
-the other.
-
-**I want to `/login` from inside the container.** The default allowlist doesn't
-cover the OAuth endpoints, on the principle that the token is the supported
-path in here. To open them for a session:
-
-```bash
-EXTRA_ALLOWED_DOMAINS="claude.com platform.claude.com" \
-  sudo /usr/local/bin/init-firewall.sh
-```

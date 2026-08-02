@@ -10,12 +10,21 @@
     }
   },
 
-  // NET_ADMIN and NET_RAW are what init-firewall.sh needs to install the
-  // egress rules. Note that --cap-drop=ALL is NOT set: sudo needs SETUID and
-  // SETGID, and dropping them takes the firewall script with it.
+  // Claude Code, the default-deny egress firewall, persistent auth/state, and
+  // the scoped sudo that keeps the agent from flushing its own rules all come
+  // from this feature. It declares NET_ADMIN/NET_RAW itself; do NOT add
+  // --cap-drop=ALL here, because sudo needs SETUID/SETGID and dropping them
+  // takes the firewall script with it.
+  "features": {
+    "ghcr.io/zlrth/devcontainer-features/claude-sandbox:1": {
+      // Maven Central and Clojars for :deps, plus the GitHub hostnames that
+      // io.github.cognitect-labs/test-runner is fetched from (belt and braces
+      // over the published ranges the feature already allows).
+      "allowedDomains": "repo1.maven.org repo.maven.apache.org repo.clojars.org codeload.github.com objects.githubusercontent.com raw.githubusercontent.com"
+    }
+  },
+
   "runArgs": [
-    "--cap-add=NET_ADMIN",
-    "--cap-add=NET_RAW",
     "--memory=8g"
   ],
 
@@ -39,14 +48,7 @@
     // each other's render — and so switching JDK_VERSION does not leave a
     // half-built tree behind. `docker volume rm shen-clj-target` forces the
     // from-scratch render that CI deliberately never caches.
-    "source=shen-clj-target,target=/workspace/target,type=volume",
-
-    // Claude Code's own state, kept out of the bind mount and separate from
-    // the host's ~/.claude. The Dockerfile sets CLAUDE_CONFIG_DIR to this path
-    // so that .claude.json — onboarding, theme, per-project trust — lands in
-    // here as well; left at its default it sits at the home root, outside the
-    // volume, and every run reopens the first-run login wizard.
-    "source=shen-clj-claude-state,target=/home/dev/.claude,type=volume"
+    "source=shen-clj-target,target=/workspace/target,type=volume"
   ],
 
   "remoteUser": "dev",
@@ -58,10 +60,6 @@
     "CLAUDE_CODE_OAUTH_TOKEN": "${localEnv:CLAUDE_CODE_OAUTH_TOKEN}",
     "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}"
   },
-
-  // Rules live in the network namespace, which is rebuilt on every start, so
-  // this is postStart rather than postCreate.
-  "postStartCommand": "sudo /usr/local/bin/init-firewall.sh",
 
   "customizations": {
     "vscode": {
