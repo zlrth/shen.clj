@@ -2,6 +2,9 @@
 /.cpcache
 /.clj-kondo/.cache
 /.lsp
+# Claude Code's local state: settings.local.json, session worktrees. Unlike
+# .devcontainer, none of it is meant to be shared.
+/.claude
 /pom.xml
 *.jar
 *.asc
