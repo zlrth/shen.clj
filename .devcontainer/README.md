@@ -46,8 +46,16 @@ sign-in screen. The wizard runs whenever `.claude.json` is absent, and that file
 lives at the home root rather than in `~/.claude` — outside the state volume,
 therefore missing on every `--rm` run. The Dockerfile fixes this by setting
 `CLAUDE_CONFIG_DIR=/home/dev/.claude`, which moves `.claude.json` into the
-volume, and by seeding an onboarded one so even the first run goes straight to
-the prompt. See [Troubleshooting](#troubleshooting) if you meet it anyway.
+volume, and `init-claude-config`, which merges the onboarding answers into that
+file at every start. See [Troubleshooting](#troubleshooting) if you meet it
+anyway.
+
+Merging at *every* start rather than seeding the image once is deliberate.
+Docker copies image content into a named volume only when the volume is empty,
+so anything baked in reaches a first run and nothing after it — and a
+`shen-clj-claude-state` from an earlier build would go on producing the login
+screen no matter how many times you rebuilt. Existing keys win the merge, so a
+theme you changed or a path you trusted is never undone.
 
 ```bash
 docker build --build-arg JDK_VERSION=21 -t shen-clj-dev:21 .devcontainer
@@ -133,9 +141,18 @@ versions CI covers. The container is the easy way onto a JDK you actually test.
 
 ## Troubleshooting
 
-**It asks me to log in anyway.** Almost always a stale state volume: the seeded
-`.claude.json` is copied in only when the volume is *empty*, so a volume created
-by an earlier build still has none. Recreate it:
+**It asks me to log in anyway.** `init-claude-config` should make this
+impossible — check it ran and what it produced:
+
+```bash
+docker run --rm -v shen-clj-claude-state:/state --entrypoint bash shen-clj-dev:21 \
+  -c 'jq "{hasCompletedOnboarding, theme, projects}" /state/.claude.json'
+```
+
+`hasCompletedOnboarding: true` there and a login screen anyway means the volume
+is not the one the container reads; anything else means the merge did not run.
+Recreating the volume is the blunt fix, at the cost of the session history in
+it:
 
 ```bash
 docker volume rm shen-clj-claude-state

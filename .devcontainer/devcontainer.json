@@ -60,8 +60,11 @@
   },
 
   // Rules live in the network namespace, which is rebuilt on every start, so
-  // this is postStart rather than postCreate.
-  "postStartCommand": "sudo /usr/local/bin/init-firewall.sh",
+  // this is postStart rather than postCreate. init-claude-config is the image's
+  // ENTRYPOINT and would normally run itself, but the devcontainer spec
+  // replaces the entrypoint with its own keep-alive; calling it here covers
+  // that. It is idempotent, so the duplication is free.
+  "postStartCommand": "sudo /usr/local/bin/init-firewall.sh && /usr/local/bin/init-claude-config",
 
   "customizations": {
     "vscode": {
