@@ -1,0 +1,71 @@
+{
+  "name": "shen.clj",
+
+  "build": {
+    "dockerfile": "Dockerfile",
+    "args": {
+      // 21 and 25 are what CI tests. Change this to 25 (and rebuild) to work
+      // against the upper bound.
+      "JDK_VERSION": "21"
+    }
+  },
+
+  // NET_ADMIN and NET_RAW are what init-firewall.sh needs to install the
+  // egress rules. Note that --cap-drop=ALL is NOT set: sudo needs SETUID and
+  // SETGID, and dropping them takes the firewall script with it.
+  "runArgs": [
+    "--cap-add=NET_ADMIN",
+    "--cap-add=NET_RAW",
+    "--memory=8g"
+  ],
+
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+
+  "mounts": [
+    // Dependency caches live in volumes rather than on the bind mount: Maven
+    // resolution across Docker Desktop's file sharing is painfully slow, and
+    // these are exactly the paths CI caches.
+    "source=shen-clj-m2,target=/home/dev/.m2,type=volume",
+    "source=shen-clj-gitlibs,target=/home/dev/.gitlibs,type=volume",
+
+    // .cpcache MUST be isolated from the host's. The Clojure CLI always
+    // prefers ./.cpcache over CLJ_CACHE when the project directory is
+    // writable, and it caches absolute classpaths — the host's entries point
+    // at /Users/..., which does not exist in here.
+    "source=shen-clj-cpcache,target=/workspace/.cpcache,type=volume",
+
+    // target/ is isolated too, so container and host builds do not overwrite
+    // each other's render — and so switching JDK_VERSION does not leave a
+    // half-built tree behind. `docker volume rm shen-clj-target` forces the
+    // from-scratch render that CI deliberately never caches.
+    "source=shen-clj-target,target=/workspace/target,type=volume",
+
+    // Claude Code's own state, kept out of the bind mount and separate from
+    // the host's ~/.claude. The Dockerfile sets CLAUDE_CONFIG_DIR to this path
+    // so that .claude.json — onboarding, theme, per-project trust — lands in
+    // here as well; left at its default it sits at the home root, outside the
+    // volume, and every run reopens the first-run login wizard.
+    "source=shen-clj-claude-state,target=/home/dev/.claude,type=volume"
+  ],
+
+  "remoteUser": "dev",
+
+  "containerEnv": {
+    // Produced on the host by `claude setup-token`. Mounting ~/.claude would
+    // not work as a substitute: on macOS the OAuth credentials live in the
+    // Keychain, not in that directory.
+    "CLAUDE_CODE_OAUTH_TOKEN": "${localEnv:CLAUDE_CODE_OAUTH_TOKEN}",
+    "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}"
+  },
+
+  // Rules live in the network namespace, which is rebuilt on every start, so
+  // this is postStart rather than postCreate.
+  "postStartCommand": "sudo /usr/local/bin/init-firewall.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": ["betterthantomorrow.calva"]
+    }
+  }
+}
